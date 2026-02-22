@@ -24,12 +24,7 @@ functions for scoring inference results.
 
 ### RoutingContext
 
-`RoutingContext` is now defined in `core/types.py`:
-
-::: openjarvis.core.types.RoutingContext
-    options:
-      show_source: true
-      members_order: source
+`RoutingContext` is defined in [`core/types.py`](core.md#openjarvis.core.types.RoutingContext).
 
 ### RewardFunction
 
