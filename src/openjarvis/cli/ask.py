@@ -323,14 +323,16 @@ def ask(
 
     # Generate (InstrumentedEngine handles telemetry + energy recording)
     try:
-        result = engine.generate(
-            messages,
-            model=model_name,
-            temperature=temperature,
-            max_tokens=max_tokens,
-        )
+        with console.status("[bold green]Generating...[/bold green]"):
+            result = engine.generate(
+                messages,
+                model=model_name,
+                temperature=temperature,
+                max_tokens=max_tokens,
+            )
     except EngineConnectionError as exc:
         console.print(f"[red]Engine error:[/red] {exc}")
+        console.print(hint_no_engine())
         sys.exit(1)
 
     # Output

@@ -7,6 +7,7 @@ from pathlib import Path
 
 import click
 from rich.console import Console
+from rich.progress import track
 from rich.table import Table
 
 from openjarvis.core.config import load_config
@@ -82,7 +83,7 @@ def index(
 
     mem = _get_backend(backend)
     try:
-        for chunk in chunks:
+        for chunk in track(chunks, description="Storing chunks...", console=console):
             mem.store(
                 chunk.content,
                 source=chunk.source,
