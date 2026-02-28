@@ -1,5 +1,6 @@
-use serde::Serialize;
 use tauri::Manager;
+use tauri::menu::{MenuBuilder, MenuItemBuilder};
+use tauri::tray::TrayIconBuilder;
 use tauri_plugin_autostart::MacosLauncher;
 
 /// Fetch health status from the OpenJarvis API server.
@@ -185,8 +186,45 @@ pub fn run() {
             }
         }))
         .setup(|app| {
-            // Set up system tray menu
-            let _tray = app.tray_by_id("main");
+            let show = MenuItemBuilder::with_id("show", "Show / Hide")
+                .build(app)?;
+            let health = MenuItemBuilder::with_id("health", "Health: checking...")
+                .enabled(false)
+                .build(app)?;
+            let quit = MenuItemBuilder::with_id("quit", "Quit OpenJarvis")
+                .build(app)?;
+
+            let menu = MenuBuilder::new(app)
+                .item(&show)
+                .separator()
+                .item(&health)
+                .separator()
+                .item(&quit)
+                .build()?;
+
+            let _tray = TrayIconBuilder::with_id("main")
+                .icon(app.default_window_icon().unwrap().clone())
+                .tooltip("OpenJarvis")
+                .menu(&menu)
+                .on_menu_event(move |app, event| {
+                    match event.id().as_ref() {
+                        "show" => {
+                            if let Some(window) = app.get_webview_window("main") {
+                                if window.is_visible().unwrap_or(false) {
+                                    let _ = window.hide();
+                                } else {
+                                    let _ = window.show();
+                                    let _ = window.set_focus();
+                                }
+                            }
+                        }
+                        "quit" => {
+                            app.exit(0);
+                        }
+                        _ => {}
+                    }
+                })
+                .build(app)?;
 
             Ok(())
         })
