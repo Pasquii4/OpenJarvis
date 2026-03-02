@@ -61,22 +61,22 @@ uv run jarvis vault list             # List stored keys
 uv run jarvis add github             # Quick-add MCP server (github, slack, postgres, etc.)
 uv run jarvis eval list                            # List 15 benchmarks and backends
 uv run jarvis eval run -b supergpqa -m "qwen3:8b"  # Single benchmark run
-uv run jarvis eval run -c evals/configs/suite.toml  # Suite mode (models x benchmarks)
+uv run jarvis eval run -c src/openjarvis/evals/configs/suite.toml  # Suite mode (models x benchmarks)
 uv run jarvis eval compare result1.jsonl result2.jsonl  # Compare runs side-by-side
 uv run jarvis eval report result.jsonl              # Detailed report with per-subject breakdown
 uv run jarvis --help         # Show all subcommands
 uv run jarvis init --force   # Detect hardware, write ~/.openjarvis/config.toml
 # Eval framework (direct module invocation)
 source .env                  # Load API keys before running evals
-uv run python -m evals run -c evals/configs/glm-4.7-flash-openhands.toml -v  # Run eval suite from TOML config
-uv run python -m evals run -b supergpqa -m "qwen3:8b" -n 50                  # Run single benchmark
-uv run python -m evals summarize results/supergpqa_qwen3-8b.jsonl            # Summarize results
+uv run python -m openjarvis.evals run -c src/openjarvis/evals/configs/glm-4.7-flash-openhands.toml -v  # Run eval suite from TOML config
+uv run python -m openjarvis.evals run -b supergpqa -m "qwen3:8b" -n 50      # Run single benchmark
+uv run python -m openjarvis.evals summarize results/supergpqa_qwen3-8b.jsonl # Summarize results
 ```
 
 ### Config File Conventions
 
 - **Runtime config (source of truth):** `configs/openjarvis/config.toml` — Pillar-aligned OpenJarvis config. Copied to `~/.openjarvis/config.toml` at runtime (which is where `load_config()` reads from).
-- **Eval suite configs:** `evals/configs/*.toml` — TOML configs defining models x benchmarks matrices.
+- **Eval suite configs:** `src/openjarvis/evals/configs/*.toml` — TOML configs defining models x benchmarks matrices.
 - **API keys:** `.env` file in project root (gitignored). Source with `source .env` before running evals or cloud operations.
 - **Never save configs to `~/.openjarvis/` directly** — always maintain the canonical copy in `configs/openjarvis/` and copy/symlink to `~/.openjarvis/`.
 
@@ -114,7 +114,7 @@ OpenJarvis is a research framework for on-device AI organized around **five comp
 
 ### Five Pillars
 
-1. **Intelligence** (`src/openjarvis/intelligence/`) — Model definition, catalog, and generation defaults. `ModelRegistry` maps model keys to `ModelSpec`. `IntelligenceConfig` holds model identity (default/fallback model, model_path, checkpoint_path, quantization, preferred_engine, provider) and generation defaults (temperature, max_tokens, top_p, top_k, repetition_penalty, stop_sequences). Model catalog maintains `BUILTIN_MODELS` with auto-discovery via `merge_discovered_models()`. Backward-compat shims re-export from `learning/` for old import paths.
+1. **Intelligence** (`src/openjarvis/intelligence/`) — Model definition, catalog, and generation defaults. `ModelRegistry` maps model keys to `ModelSpec`. `IntelligenceConfig` holds model identity (default/fallback model, model_path, checkpoint_path, quantization, preferred_engine, provider) and generation defaults (temperature, max_tokens, top_p, top_k, repetition_penalty, stop_sequences). Model catalog maintains `BUILTIN_MODELS` with auto-discovery via `merge_discovered_models()`.
 2. **Engine** (`src/openjarvis/engine/`) — The inference runtime. Backends: vLLM, SGLang, Ollama, llama.cpp, MLX, LM Studio. All implement `InferenceEngine` ABC with `generate()`, `stream()`, `list_models()`, `health()`. Engines extract and pass through `tool_calls` in OpenAI format.
 3. **Agents** (`src/openjarvis/agents/`) — Pluggable logic for queries, tool/API calls, memory. Hierarchy: `BaseAgent` ABC (helpers: `_emit_turn_start/end`, `_build_messages`, `_generate`, `_max_turns_result`, `_strip_think_tags`, `_check_continuation`) → `ToolUsingAgent` (adds `tools`, `ToolExecutor`, `max_turns`). Agents: `SimpleAgent` (single-turn), `OrchestratorAgent` (multi-turn tool loop), `NativeReActAgent` (Thought-Action-Observation, key `"native_react"`, alias `"react"`), `NativeOpenHandsAgent` (CodeAct, key `"native_openhands"`), `RLMAgent` (recursive LM), `OpenHandsAgent` (real `openhands-sdk`, key `"openhands"`, requires Python 3.12+), `OpenClawAgent` (HTTP/subprocess transport), `ClaudeCodeAgent` (Claude Agent SDK via Node.js, key `"claude_code"`), `SandboxedAgent` (Docker wrapper, key `"sandboxed"`). `accepts_tools` class attribute for CLI/SDK auto-detection. Agents call `engine.generate()` directly — telemetry handled by `InstrumentedEngine` wrapper.
 4. **Tools** (`src/openjarvis/tools/`) — All tools managed via MCP (Model Context Protocol).
@@ -123,7 +123,7 @@ OpenJarvis is a research framework for on-device AI organized around **five comp
    - **Browser tools** (`browser.py`): `BrowserNavigateTool`, `BrowserClickTool`, `BrowserTypeTool`, `BrowserScreenshotTool`, `BrowserExtractTool` (Playwright, optional `[browser]`)
    - **Agent tools** (`agent_tools.py`): `AgentSpawnTool`, `AgentSendTool`, `AgentListTool`, `AgentKillTool`
    - **Storage tools** (`storage_tools.py`): `MemoryStoreTool`, `MemoryRetrieveTool`, `MemorySearchTool`, `MemoryIndexTool`
-   - **Storage backends** (`tools/storage/`): SQLite/FTS5 (default), FAISS, ColBERTv2, BM25, Hybrid (RRF fusion), KnowledgeGraph. All implement `MemoryBackend` ABC. Canonical import: `from openjarvis.tools.storage.sqlite import SQLiteMemory`. Backward-compat shims in `memory/` still work.
+   - **Storage backends** (`tools/storage/`): SQLite/FTS5 (default), FAISS, ColBERTv2, BM25, Hybrid (RRF fusion), KnowledgeGraph. All implement `MemoryBackend` ABC. Canonical import: `from openjarvis.tools.storage.sqlite import SQLiteMemory`.
    - **Scheduler tools** (`scheduler/tools.py`): 5 MCP tools for task scheduling
    - **Knowledge graph tools** (`knowledge_tools.py`): `KGAddEntityTool`, `KGAddRelationTool`, `KGQueryTool`, `KGNeighborsTool`
    - **MCP adapter** (`mcp_adapter.py`): `MCPToolAdapter` wraps external MCP tools as native `BaseTool`; `MCPToolProvider` discovers from server
@@ -144,10 +144,10 @@ OpenJarvis is a research framework for on-device AI organized around **five comp
 - **Composition Layer** (`system.py`) — `SystemBuilder` fluent builder → `JarvisSystem` with `ask()`, `close()`. Wires engine, model, agent, tools, telemetry, traces, workflow, sessions, capability policy.
 - **SDK** (`sdk.py`) — `Jarvis` class: high-level sync API with `ask()`/`ask_full()`, `MemoryHandle`, lazy init, telemetry. Also exports `JarvisSystem`/`SystemBuilder`.
 - **Benchmarks** (`bench/`) — `LatencyBenchmark`, `ThroughputBenchmark`, `EnergyBenchmark`. All registered via `BenchmarkRegistry`. CLI: `jarvis bench run`.
-- **Eval Framework** (`evals/`) — 15 real benchmark datasets from IPW: SuperGPQA, GPQA, MMLU-Pro, MATH-500, Natural Reasoning, HLE, SimpleQA, WildChat, IPW, GAIA, FRAMES, SWE-bench, SWEfficiency, TerminalBench, TerminalBench Native. Scorer types: MCQ letter extraction, LLM-judge, exact match, structural validation. `EvalRunner` with parallel execution. CLI: `jarvis eval list|run|compare|report`.
-- **Recipes** (`recipes/`, `src/openjarvis/recipes/`) — Composable TOML configs that wire all 5 pillars. `Recipe` dataclass with `to_builder_kwargs()`. `load_recipe()`, `discover_recipes()`, `resolve_recipe()`. 3 built-in recipes: coding_assistant, research_assistant, general_assistant. Operator recipes (`recipes/operators/`): researcher (4h cycle), correspondent (5min interval), sentinel (2h cycle).
-- **Agent Templates** (`templates/agents/`, `src/openjarvis/templates/`) — Pre-configured TOML manifests with system prompts, tool sets, behavioral parameters. `AgentTemplate` dataclass, `load_template()`, `discover_templates()`. 15 built-in templates (code-reviewer, debugger, architect, deep-researcher, fact-checker, summarizer, etc.).
-- **Bundled Skills** (`skills/builtin/`) — 20 ready-to-use TOML skill manifests. Categories: file management (organizer, deduplicator, backup), research (web-summarize, topic-research, knowledge-extract), code quality (lint, test-gen, security-scan, dependency-audit), productivity (email-draft, meeting-notes, daily-digest), document processing (compare, translate, data-analyze).
+- **Eval Framework** (`src/openjarvis/evals/`) — 15 real benchmark datasets from IPW: SuperGPQA, GPQA, MMLU-Pro, MATH-500, Natural Reasoning, HLE, SimpleQA, WildChat, IPW, GAIA, FRAMES, SWE-bench, SWEfficiency, TerminalBench, TerminalBench Native. Scorer types: MCQ letter extraction, LLM-judge, exact match, structural validation. `EvalRunner` with parallel execution. CLI: `jarvis eval list|run|compare|report`.
+- **Recipes** (`src/openjarvis/recipes/`) — Composable TOML configs that wire all 5 pillars. `Recipe` dataclass with `to_builder_kwargs()`. `load_recipe()`, `discover_recipes()`, `resolve_recipe()`. 3 built-in recipes in `data/`: coding_assistant, research_assistant, general_assistant. Operator recipes in `data/operators/`: researcher (4h cycle), correspondent (5min interval), sentinel (2h cycle).
+- **Agent Templates** (`src/openjarvis/templates/`) — Pre-configured TOML manifests with system prompts, tool sets, behavioral parameters. `AgentTemplate` dataclass, `load_template()`, `discover_templates()`. 15 built-in templates in `data/` (code-reviewer, debugger, architect, deep-researcher, fact-checker, summarizer, etc.).
+- **Bundled Skills** (`src/openjarvis/skills/data/`) — 20 ready-to-use TOML skill manifests. Categories: file management (organizer, deduplicator, backup), research (web-summarize, topic-research, knowledge-extract), code quality (lint, test-gen, security-scan, dependency-audit), productivity (email-draft, meeting-notes, daily-digest), document processing (compare, translate, data-analyze).
 - **OpenClaw** (`agents/openclaw*.py`) — `OpenClawAgent` with `HttpTransport`/`SubprocessTransport`, JSON-line protocol, `ProviderPlugin`, `MemorySearchManager`.
 - **API Server** (`server/`) — OpenAI-compatible via `jarvis serve` (FastAPI + uvicorn). Endpoints: `POST /v1/chat/completions`, `GET /v1/models`, `GET /health`, channel endpoints. SSE streaming.
 - **Channels** (`channels/`) — `BaseChannel` ABC. `OpenClawChannelBridge` (WebSocket/HTTP to OpenClaw gateway). `WhatsAppBaileysChannel` (Baileys protocol, Node.js bridge, QR auth). Phase 21 channels: `LINEChannel`, `ViberChannel`, `MessengerChannel`, `RedditChannel`, `MastodonChannel`, `XMPPChannel`, `RocketChatChannel`, `ZulipChannel`, `TwitchChannel`, `NostrChannel`. All follow `BaseChannel` ABC with env var fallbacks, `@ChannelRegistry.register()`, `EventBus` integration.
@@ -173,10 +173,10 @@ OpenJarvis is a research framework for on-device AI organized around **five comp
 
 ### Docker & Deployment
 
-- `Dockerfile` — Multi-stage: Python 3.12-slim, `.[server]`, entrypoint `jarvis serve`
-- `Dockerfile.gpu` — NVIDIA CUDA 12.4 variant
-- `Dockerfile.gpu.rocm` — AMD ROCm 6.2 variant
-- `docker-compose.yml` — `jarvis` (8000) + `ollama` (11434). ROCm override: `docker-compose.gpu.rocm.yml`
+- `deploy/docker/Dockerfile` — Multi-stage: Python 3.12-slim, `.[server]`, entrypoint `jarvis serve`
+- `deploy/docker/Dockerfile.gpu` — NVIDIA CUDA 12.4 variant
+- `deploy/docker/Dockerfile.gpu.rocm` — AMD ROCm 6.2 variant
+- `deploy/docker/docker-compose.yml` — `jarvis` (8000) + `ollama` (11434). ROCm override: `docker-compose.gpu.rocm.yml`
 - `deploy/systemd/openjarvis.service`, `deploy/launchd/com.openjarvis.plist`
 
 ### Query Flow
@@ -207,7 +207,7 @@ OpenAI-compatible server via `jarvis serve`:
 - **Offline-first:** Cloud APIs are optional. All core functionality works without network.
 - **Hardware-aware:** Auto-detect GPU vendor/model/VRAM via `nvidia-smi`, `rocm-smi`, `system_profiler`, `/proc/cpuinfo`. Recommend engine accordingly.
 - **Telemetry opt-in:** `InstrumentedEngine` wraps inference transparently. Agents unaware of telemetry.
-- **Backward-compat shims:** `memory/` re-exports from `tools/storage/`, `intelligence/` re-exports from `learning/`, `agents/react.py` re-exports as `ReActAgent`, registry alias `"react"` → `NativeReActAgent`. Old import paths and config keys continue to work.
+- **Backward-compat shims:** `intelligence/` re-exports from `learning/`, `agents/react.py` re-exports as `ReActAgent`, registry alias `"react"` → `NativeReActAgent`. Old config keys continue to work.
 - **`ensure_registered()` pattern:** Benchmark and learning modules use lazy registration to survive registry clearing in tests.
 
 ## Development Phases
