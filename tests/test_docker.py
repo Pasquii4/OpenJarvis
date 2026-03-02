@@ -5,17 +5,18 @@ from __future__ import annotations
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+DOCKER_DIR = ROOT / "deploy" / "docker"
 
 
 class TestDockerFiles:
     def test_dockerfile_exists(self):
-        assert (ROOT / "Dockerfile").is_file()
+        assert (DOCKER_DIR / "Dockerfile").is_file()
 
     def test_dockerfile_gpu_exists(self):
-        assert (ROOT / "Dockerfile.gpu").is_file()
+        assert (DOCKER_DIR / "Dockerfile.gpu").is_file()
 
     def test_dockerfile_has_entrypoint(self):
-        content = (ROOT / "Dockerfile").read_text()
+        content = (DOCKER_DIR / "Dockerfile").read_text()
         assert "ENTRYPOINT" in content
         assert "jarvis" in content
 
@@ -28,7 +29,7 @@ class TestDockerFiles:
         except ImportError:
             pass
 
-        compose_path = ROOT / "docker-compose.yml"
+        compose_path = DOCKER_DIR / "docker-compose.yml"
         assert compose_path.is_file()
         content = compose_path.read_text()
 
@@ -41,7 +42,7 @@ class TestDockerFiles:
             assert "services" in data
 
     def test_docker_compose_has_services(self):
-        content = (ROOT / "docker-compose.yml").read_text()
+        content = (DOCKER_DIR / "docker-compose.yml").read_text()
         assert "jarvis:" in content
         assert "ollama:" in content
 
