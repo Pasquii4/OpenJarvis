@@ -4,13 +4,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Status
 
-OpenJarvis is a research framework for studying on-device AI systems. Phase 21 complete. Five composable pillars: Intelligence, Engine, Agents, Tools (with storage + MCP), and Learning — with trace-driven learning as a cross-cutting concern. ~2940 tests pass (~51 skipped for optional deps). Python SDK (`Jarvis` class), composition layer (`SystemBuilder`/`JarvisSystem`), benchmarking framework, Docker deployment, Tauri desktop app, 40+ tools, 20+ CLI commands, 40+ API endpoints all ready.
+OpenJarvis is a research framework for studying on-device AI systems. Phase 23 complete. Five composable pillars: Intelligence, Engine, Agents, Tools (with storage + MCP), and Learning — with trace-driven learning as a cross-cutting concern. ~3240 tests pass (~44 skipped for optional deps). Python SDK (`Jarvis` class), composition layer (`SystemBuilder`/`JarvisSystem`), eval framework (15 real benchmarks), composable recipes, agent templates, bundled skills, operator recipes, trace-driven learning pipeline, Docker deployment, Tauri desktop app, 40+ tools, 20+ CLI commands, 40+ API endpoints all ready.
 
 ## Build & Development Commands
 
 ```bash
 uv sync --extra dev          # Install deps + dev tools
-uv run pytest tests/ -v      # Run ~2997 tests (~42 skipped if optional deps missing)
+uv run pytest tests/ -v      # Run ~3241 tests (~44 skipped if optional deps missing)
 uv run ruff check src/ tests/ # Lint
 uv run jarvis --version      # 1.0.0
 uv run jarvis ask "Hello"    # Query via discovered engine (direct mode)
@@ -59,9 +59,14 @@ uv run jarvis vault set MY_KEY       # Store encrypted credential
 uv run jarvis vault get MY_KEY       # Retrieve credential
 uv run jarvis vault list             # List stored keys
 uv run jarvis add github             # Quick-add MCP server (github, slack, postgres, etc.)
+uv run jarvis eval list                            # List 15 benchmarks and backends
+uv run jarvis eval run -b supergpqa -m "qwen3:8b"  # Single benchmark run
+uv run jarvis eval run -c evals/configs/suite.toml  # Suite mode (models x benchmarks)
+uv run jarvis eval compare result1.jsonl result2.jsonl  # Compare runs side-by-side
+uv run jarvis eval report result.jsonl              # Detailed report with per-subject breakdown
 uv run jarvis --help         # Show all subcommands
 uv run jarvis init --force   # Detect hardware, write ~/.openjarvis/config.toml
-# Eval framework
+# Eval framework (direct module invocation)
 source .env                  # Load API keys before running evals
 uv run python -m evals run -c evals/configs/glm-4.7-flash-openhands.toml -v  # Run eval suite from TOML config
 uv run python -m evals run -b supergpqa -m "qwen3:8b" -n 50                  # Run single benchmark
@@ -99,7 +104,7 @@ j.close()                             # Release resources
 
 - **Package manager:** `uv` with `hatchling` build backend
 - **Config:** `pyproject.toml` with extras for optional backends (e.g., `openjarvis[inference-vllm]`, `openjarvis[inference-mlx]`, `openjarvis[memory-colbert]`, `openjarvis[server]`, `openjarvis[openclaw]`, `openjarvis[energy-amd]`, `openjarvis[energy-apple]`, `openjarvis[energy-all]`, `openjarvis[security-signing]`, `openjarvis[sandbox-wasm]`, `openjarvis[dashboard]`, `openjarvis[browser]`, `openjarvis[media]`, `openjarvis[pdf]`, `openjarvis[channel-line]`, `openjarvis[channel-viber]`, `openjarvis[channel-reddit]`, `openjarvis[channel-mastodon]`, `openjarvis[channel-xmpp]`, `openjarvis[channel-rocketchat]`, `openjarvis[channel-zulip]`, `openjarvis[channel-twitch]`, `openjarvis[channel-nostr]`)
-- **CLI entry point:** `jarvis` (Click-based) — subcommands: `init`, `ask`, `serve`, `start`, `stop`, `restart`, `status`, `chat`, `model`, `memory`, `telemetry`, `bench`, `channel`, `scheduler`, `doctor`, `agent`, `workflow`, `skill`, `vault`, `add`
+- **CLI entry point:** `jarvis` (Click-based) — subcommands: `init`, `ask`, `serve`, `start`, `stop`, `restart`, `status`, `chat`, `model`, `memory`, `telemetry`, `bench`, `eval`, `channel`, `scheduler`, `doctor`, `agent`, `workflow`, `skill`, `vault`, `add`
 - **Python:** 3.10+ required
 - **Node.js:** 22+ required only for OpenClaw agent
 
@@ -126,7 +131,7 @@ OpenJarvis is a research framework for on-device AI organized around **five comp
    - **MCP templates** (`tools/templates/`): `ToolTemplate` dynamically constructs tools from TOML specs. 10 builtin templates. `discover_templates()` auto-discovers.
    - **`ToolExecutor`**: dispatch with RBAC check + taint check, `timeout_seconds` on `ToolSpec` (default 30s via `ThreadPoolExecutor`), event bus integration
    - All registered via `@ToolRegistry.register("name")` decorator
-5. **Learning** (`src/openjarvis/learning/`) — Structured learning with nested per-pillar sub-policies. `LearningConfig` sections: `routing` (heuristic/learned/grpo/bandit), `intelligence` (none/sft), `agent` (none/agent_advisor/icl_updater), `metrics` (accuracy/latency/cost/efficiency weights). Policies: `SFTRouterPolicy` (query→model from traces), `AgentAdvisorPolicy` (LM-guided), `ICLUpdaterPolicy` (in-context with example DB, versioning, rollback, quality gates), `GRPORouterPolicy` (softmax sampling, group relative advantage, per-query-class weights), `BanditRouterPolicy` (Thompson Sampling / UCB1, per-arm stats). `SkillDiscovery` mines tool subsequences from traces to auto-generate skill manifests. Router policies: `HeuristicRouter`, `TraceDrivenPolicy`. Orchestrator training subpackage provides SFT and GRPO pipelines.
+5. **Learning** (`src/openjarvis/learning/`) — Structured learning with nested per-pillar sub-policies. `LearningConfig` sections: `routing` (heuristic/learned/grpo/bandit), `intelligence` (none/sft), `agent` (none/agent_advisor/icl_updater), `metrics` (accuracy/latency/cost/efficiency weights). Policies: `SFTRouterPolicy` (query→model from traces), `AgentAdvisorPolicy` (LM-guided), `ICLUpdaterPolicy` (in-context with example DB, versioning, rollback, quality gates), `GRPORouterPolicy` (softmax sampling, group relative advantage, per-query-class weights), `BanditRouterPolicy` (Thompson Sampling / UCB1, per-arm stats). `SkillDiscovery` mines tool subsequences from traces to auto-generate skill manifests. Router policies: `HeuristicRouter`, `TraceDrivenPolicy`. Orchestrator training subpackage provides SFT and GRPO pipelines. **Trace-driven learning pipeline**: `TrainingDataMiner` (extracts SFT pairs from traces with quality filters), `LoRATrainer` (LoRA fine-tuning with configurable rank/alpha, requires torch), `AgentConfigEvolver` (LM-guided agent config recommendations from trace patterns), `LearningOrchestrator` (wired into `SystemBuilder`, orchestrates mine→train→evolve cycle on schedule).
 
 ### Cross-cutting Systems
 
@@ -139,6 +144,10 @@ OpenJarvis is a research framework for on-device AI organized around **five comp
 - **Composition Layer** (`system.py`) — `SystemBuilder` fluent builder → `JarvisSystem` with `ask()`, `close()`. Wires engine, model, agent, tools, telemetry, traces, workflow, sessions, capability policy.
 - **SDK** (`sdk.py`) — `Jarvis` class: high-level sync API with `ask()`/`ask_full()`, `MemoryHandle`, lazy init, telemetry. Also exports `JarvisSystem`/`SystemBuilder`.
 - **Benchmarks** (`bench/`) — `LatencyBenchmark`, `ThroughputBenchmark`, `EnergyBenchmark`. All registered via `BenchmarkRegistry`. CLI: `jarvis bench run`.
+- **Eval Framework** (`evals/`) — 15 real benchmark datasets from IPW: SuperGPQA, GPQA, MMLU-Pro, MATH-500, Natural Reasoning, HLE, SimpleQA, WildChat, IPW, GAIA, FRAMES, SWE-bench, SWEfficiency, TerminalBench, TerminalBench Native. Scorer types: MCQ letter extraction, LLM-judge, exact match, structural validation. `EvalRunner` with parallel execution. CLI: `jarvis eval list|run|compare|report`.
+- **Recipes** (`recipes/`, `src/openjarvis/recipes/`) — Composable TOML configs that wire all 5 pillars. `Recipe` dataclass with `to_builder_kwargs()`. `load_recipe()`, `discover_recipes()`, `resolve_recipe()`. 3 built-in recipes: coding_assistant, research_assistant, general_assistant. Operator recipes (`recipes/operators/`): researcher (4h cycle), correspondent (5min interval), sentinel (2h cycle).
+- **Agent Templates** (`templates/agents/`, `src/openjarvis/templates/`) — Pre-configured TOML manifests with system prompts, tool sets, behavioral parameters. `AgentTemplate` dataclass, `load_template()`, `discover_templates()`. 15 built-in templates (code-reviewer, debugger, architect, deep-researcher, fact-checker, summarizer, etc.).
+- **Bundled Skills** (`skills/builtin/`) — 20 ready-to-use TOML skill manifests. Categories: file management (organizer, deduplicator, backup), research (web-summarize, topic-research, knowledge-extract), code quality (lint, test-gen, security-scan, dependency-audit), productivity (email-draft, meeting-notes, daily-digest), document processing (compare, translate, data-analyze).
 - **OpenClaw** (`agents/openclaw*.py`) — `OpenClawAgent` with `HttpTransport`/`SubprocessTransport`, JSON-line protocol, `ProviderPlugin`, `MemorySearchManager`.
 - **API Server** (`server/`) — OpenAI-compatible via `jarvis serve` (FastAPI + uvicorn). Endpoints: `POST /v1/chat/completions`, `GET /v1/models`, `GET /health`, channel endpoints. SSE streaming.
 - **Channels** (`channels/`) — `BaseChannel` ABC. `OpenClawChannelBridge` (WebSocket/HTTP to OpenClaw gateway). `WhatsAppBaileysChannel` (Baileys protocol, Node.js bridge, QR auth). Phase 21 channels: `LINEChannel`, `ViberChannel`, `MessengerChannel`, `RedditChannel`, `MastodonChannel`, `XMPPChannel`, `RocketChatChannel`, `ZulipChannel`, `TwitchChannel`, `NostrChannel`. All follow `BaseChannel` ABC with env var fallbacks, `@ChannelRegistry.register()`, `EventBus` integration.
@@ -227,3 +236,5 @@ OpenAI-compatible server via `jarvis serve`:
 | v2.4 | 19 | Learning productionization: GRPO (softmax/advantage), BanditRouter (Thompson/UCB1), SkillDiscovery (trace mining), ICL updates (versioning/rollback/quality gates) |
 | v2.5 | 20 | Tauri 2.0 desktop app: energy dashboard, trace debugger, learning curve visualization, memory browser, admin panel. CI for Linux/macOS/Windows |
 | v2.6 | 21 | 10 new channels: LINE, Viber, Messenger, Reddit, Mastodon, XMPP, Rocket.Chat, Zulip, Twitch, Nostr |
+| v2.7 | 22 | Operators: persistent, scheduled autonomous agents with recipe + schedule + channel output |
+| v2.8 | 23 | Differentiated functionalities: trace-driven learning pipeline (TrainingDataMiner, LoRATrainer, AgentConfigEvolver, LearningOrchestrator), 15 real IPW benchmarks, composable recipes, 15 agent templates, 20 bundled skills, 3 operator recipes |

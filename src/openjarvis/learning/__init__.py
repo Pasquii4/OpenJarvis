@@ -8,11 +8,15 @@ from openjarvis.learning._stubs import (
     RouterPolicy,
     RoutingContext,
 )
+from openjarvis.learning.agent_evolver import AgentConfigEvolver
 from openjarvis.learning.heuristic_reward import HeuristicRewardFunction
+from openjarvis.learning.learning_orchestrator import LearningOrchestrator
 from openjarvis.learning.router import (
     HeuristicRouter,
     build_routing_context,
 )
+from openjarvis.learning.training.data import TrainingDataMiner
+from openjarvis.learning.training.lora import HAS_TORCH, LoRATrainer, LoRATrainingConfig
 
 
 def ensure_registered() -> None:
@@ -73,12 +77,18 @@ def ensure_registered() -> None:
 
 
 __all__ = [
+    "AgentConfigEvolver",
+    "HAS_TORCH",
     "HeuristicRewardFunction",
     "HeuristicRouter",
+    "LearningOrchestrator",
+    "LoRATrainer",
+    "LoRATrainingConfig",
     "QueryAnalyzer",
     "RewardFunction",
     "RouterPolicy",
     "RoutingContext",
+    "TrainingDataMiner",
     "build_routing_context",
     "ensure_registered",
 ]

@@ -40,6 +40,7 @@ class JarvisSystem:
     session_store: Optional[Any] = None  # SessionStore
     capability_policy: Optional[Any] = None  # CapabilityPolicy
     operator_manager: Optional[Any] = None  # OperatorManager
+    _learning_orchestrator: Optional[Any] = None  # LearningOrchestrator
 
     def ask(
         self,
@@ -443,7 +444,10 @@ class SystemBuilder:
         # Set up capability policy
         capability_policy = self._setup_capabilities(config)
 
-        return JarvisSystem(
+        # Set up learning orchestrator (when training is enabled)
+        learning_orchestrator = self._setup_learning_orchestrator(config)
+
+        system = JarvisSystem(
             config=config,
             bus=bus,
             engine=engine,
@@ -463,6 +467,8 @@ class SystemBuilder:
             session_store=session_store,
             capability_policy=capability_policy,
         )
+        system._learning_orchestrator = learning_orchestrator
+        return system
 
     def _resolve_engine(self, config: JarvisConfig):
         """Resolve the inference engine."""
@@ -849,6 +855,37 @@ class SystemBuilder:
 
             return CapabilityPolicy(
                 policy_path=config.security.capabilities.policy_path or None,
+            )
+        except Exception:
+            return None
+
+    @staticmethod
+    def _setup_learning_orchestrator(config: JarvisConfig):
+        """Set up LearningOrchestrator when training is enabled."""
+        if not config.learning.training_enabled:
+            return None
+        try:
+            from openjarvis.core.config import DEFAULT_CONFIG_DIR
+            from openjarvis.learning.learning_orchestrator import (
+                LearningOrchestrator,
+            )
+            from openjarvis.learning.training.lora import LoRATrainingConfig
+            from openjarvis.traces.store import TraceStore
+
+            trace_store = TraceStore(db_path=config.traces.db_path)
+            config_dir = DEFAULT_CONFIG_DIR / "agent_configs"
+
+            lora_config = LoRATrainingConfig(
+                lora_rank=config.learning.lora_rank,
+                lora_alpha=config.learning.lora_alpha,
+            )
+
+            return LearningOrchestrator(
+                trace_store=trace_store,
+                config_dir=config_dir,
+                min_improvement=config.learning.min_improvement,
+                min_sft_pairs=config.learning.min_sft_pairs,
+                lora_config=lora_config,
             )
         except Exception:
             return None

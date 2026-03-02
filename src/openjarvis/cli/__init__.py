@@ -7,16 +7,17 @@ import click
 import openjarvis
 from openjarvis.cli.add_cmd import add
 from openjarvis.cli.agent_cmd import agent
-from openjarvis.cli.operators_cmd import operators
 from openjarvis.cli.ask import ask
 from openjarvis.cli.bench_cmd import bench
 from openjarvis.cli.channel_cmd import channel
 from openjarvis.cli.chat_cmd import chat
 from openjarvis.cli.daemon_cmd import restart, start, status, stop
 from openjarvis.cli.doctor_cmd import doctor
+from openjarvis.cli.eval_cmd import eval_group
 from openjarvis.cli.init_cmd import init
 from openjarvis.cli.memory_cmd import memory
 from openjarvis.cli.model import model
+from openjarvis.cli.operators_cmd import operators
 from openjarvis.cli.scheduler_cmd import scheduler
 from openjarvis.cli.serve import serve
 from openjarvis.cli.skill_cmd import skill
@@ -52,6 +53,7 @@ cli.add_command(status, "status")
 cli.add_command(vault, "vault")
 cli.add_command(add, "add")
 cli.add_command(operators, "operators")
+cli.add_command(eval_group, "eval")
 
 
 def main() -> None:

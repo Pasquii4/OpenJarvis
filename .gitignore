@@ -56,3 +56,6 @@ src/openjarvis/server/static/
 desktop/node_modules/
 desktop/dist/
 desktop/src-tauri/target/
+
+# Worktrees
+.worktrees/

@@ -34,7 +34,12 @@ logger = logging.getLogger(__name__)
 VALID_BACKENDS = {"jarvis-direct", "jarvis-agent"}
 
 # Known benchmark names (used for warnings, not hard validation)
-KNOWN_BENCHMARKS = {"supergpqa", "gaia", "frames", "wildchat"}
+KNOWN_BENCHMARKS = {
+    "supergpqa", "gpqa", "mmlu-pro", "math500", "natural-reasoning", "hle",
+    "simpleqa", "wildchat", "ipw",
+    "gaia", "frames", "swebench", "swefficiency",
+    "terminalbench", "terminalbench-native",
+}
 
 
 class EvalConfigError(Exception):

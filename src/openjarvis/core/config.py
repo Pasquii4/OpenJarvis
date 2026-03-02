@@ -402,6 +402,14 @@ class LearningConfig:
     agent: AgentLearningConfig = field(default_factory=AgentLearningConfig)
     metrics: MetricsConfig = field(default_factory=MetricsConfig)
 
+    # Training pipeline
+    training_enabled: bool = False
+    training_schedule: str = ""  # cron expression or empty for on-demand
+    lora_rank: int = 16
+    lora_alpha: int = 32
+    min_sft_pairs: int = 50
+    min_improvement: float = 0.02
+
     # Backward-compat properties for old flat field names
     @property
     def default_policy(self) -> str:

@@ -30,9 +30,25 @@ from evals.core.display import (
 # Registry of available benchmarks and their metadata
 BENCHMARKS = {
     "supergpqa": {"category": "reasoning", "description": "SuperGPQA multiple-choice"},
+    "gpqa": {"category": "reasoning", "description": "GPQA graduate-level MCQ"},
+    "mmlu-pro": {"category": "reasoning", "description": "MMLU-Pro multiple-choice"},
+    "math500": {"category": "reasoning", "description": "MATH-500 math problems"},
+    "natural-reasoning": {"category": "reasoning", "description": "Natural Reasoning"},
+    "hle": {"category": "reasoning", "description": "HLE hard challenges"},
+    "simpleqa": {"category": "chat", "description": "SimpleQA factual QA"},
+    "wildchat": {"category": "chat", "description": "WildChat conversation quality"},
+    "ipw": {"category": "chat", "description": "IPW mixed benchmark"},
     "gaia": {"category": "agentic", "description": "GAIA agentic benchmark"},
     "frames": {"category": "rag", "description": "FRAMES multi-hop RAG"},
-    "wildchat": {"category": "chat", "description": "WildChat conversation quality"},
+    "swebench": {"category": "agentic", "description": "SWE-bench code patches"},
+    "swefficiency": {"category": "agentic", "description": "SWEfficiency optimization"},
+    "terminalbench": {
+        "category": "agentic", "description": "TerminalBench terminal tasks",
+    },
+    "terminalbench-native": {
+        "category": "agentic",
+        "description": "TerminalBench Native (Docker)",
+    },
 }
 
 BACKENDS = {
@@ -77,15 +93,48 @@ def _build_dataset(benchmark: str):
     if benchmark == "supergpqa":
         from evals.datasets.supergpqa import SuperGPQADataset
         return SuperGPQADataset()
+    elif benchmark == "gpqa":
+        from evals.datasets.gpqa import GPQADataset
+        return GPQADataset()
+    elif benchmark == "mmlu-pro":
+        from evals.datasets.mmlu_pro import MMLUProDataset
+        return MMLUProDataset()
+    elif benchmark == "math500":
+        from evals.datasets.math500 import MATH500Dataset
+        return MATH500Dataset()
+    elif benchmark == "natural-reasoning":
+        from evals.datasets.natural_reasoning import NaturalReasoningDataset
+        return NaturalReasoningDataset()
+    elif benchmark == "hle":
+        from evals.datasets.hle import HLEDataset
+        return HLEDataset()
+    elif benchmark == "simpleqa":
+        from evals.datasets.simpleqa import SimpleQADataset
+        return SimpleQADataset()
+    elif benchmark == "wildchat":
+        from evals.datasets.wildchat import WildChatDataset
+        return WildChatDataset()
+    elif benchmark == "ipw":
+        from evals.datasets.ipw_mixed import IPWDataset
+        return IPWDataset()
     elif benchmark == "gaia":
         from evals.datasets.gaia import GAIADataset
         return GAIADataset()
     elif benchmark == "frames":
         from evals.datasets.frames import FRAMESDataset
         return FRAMESDataset()
-    elif benchmark == "wildchat":
-        from evals.datasets.wildchat import WildChatDataset
-        return WildChatDataset()
+    elif benchmark == "swebench":
+        from evals.datasets.swebench import SWEBenchDataset
+        return SWEBenchDataset()
+    elif benchmark == "swefficiency":
+        from evals.datasets.swefficiency import SWEfficiencyDataset
+        return SWEfficiencyDataset()
+    elif benchmark == "terminalbench":
+        from evals.datasets.terminalbench import TerminalBenchDataset
+        return TerminalBenchDataset()
+    elif benchmark == "terminalbench-native":
+        from evals.datasets.terminalbench_native import TerminalBenchNativeDataset
+        return TerminalBenchNativeDataset()
     else:
         raise click.ClickException(f"Unknown benchmark: {benchmark}")
 
@@ -95,15 +144,47 @@ def _build_scorer(benchmark: str, judge_backend, judge_model: str):
     if benchmark == "supergpqa":
         from evals.scorers.supergpqa_mcq import SuperGPQAScorer
         return SuperGPQAScorer(judge_backend, judge_model)
+    elif benchmark == "gpqa":
+        from evals.scorers.gpqa_mcq import GPQAScorer
+        return GPQAScorer(judge_backend, judge_model)
+    elif benchmark == "mmlu-pro":
+        from evals.scorers.mmlu_pro_mcq import MMLUProScorer
+        return MMLUProScorer(judge_backend, judge_model)
+    elif benchmark == "math500" or benchmark == "natural-reasoning":
+        from evals.scorers.reasoning_judge import ReasoningJudgeScorer
+        return ReasoningJudgeScorer(judge_backend, judge_model)
+    elif benchmark == "hle":
+        from evals.scorers.hle_judge import HLEScorer
+        return HLEScorer(judge_backend, judge_model)
+    elif benchmark == "simpleqa":
+        from evals.scorers.simpleqa_judge import SimpleQAScorer
+        return SimpleQAScorer(judge_backend, judge_model)
+    elif benchmark == "wildchat":
+        from evals.scorers.wildchat_judge import WildChatScorer
+        return WildChatScorer(judge_backend, judge_model)
+    elif benchmark == "ipw":
+        from evals.scorers.ipw_mixed import IPWMixedScorer
+        return IPWMixedScorer(judge_backend, judge_model)
     elif benchmark == "gaia":
         from evals.scorers.gaia_exact import GAIAScorer
         return GAIAScorer(judge_backend, judge_model)
     elif benchmark == "frames":
         from evals.scorers.frames_judge import FRAMESScorer
         return FRAMESScorer(judge_backend, judge_model)
-    elif benchmark == "wildchat":
-        from evals.scorers.wildchat_judge import WildChatScorer
-        return WildChatScorer(judge_backend, judge_model)
+    elif benchmark == "swebench":
+        from evals.scorers.swebench_structural import SWEBenchScorer
+        return SWEBenchScorer(judge_backend, judge_model)
+    elif benchmark == "swefficiency":
+        from evals.scorers.swefficiency_structural import SWEfficiencyScorer
+        return SWEfficiencyScorer(judge_backend, judge_model)
+    elif benchmark == "terminalbench":
+        from evals.scorers.terminalbench_judge import TerminalBenchScorer
+        return TerminalBenchScorer(judge_backend, judge_model)
+    elif benchmark == "terminalbench-native":
+        from evals.scorers.terminalbench_native_structural import (
+            TerminalBenchNativeScorer,
+        )
+        return TerminalBenchNativeScorer(judge_backend, judge_model)
     else:
         raise click.ClickException(f"Unknown benchmark: {benchmark}")
 
