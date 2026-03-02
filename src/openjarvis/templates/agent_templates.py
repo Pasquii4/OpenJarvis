@@ -67,8 +67,7 @@ def load_template(path: str | Path) -> AgentTemplate:
 
 def _builtin_templates_dir() -> Path:
     """Return the path to the built-in templates shipped with the package."""
-    # templates/agents/ at project root, 3 levels above this file
-    return Path(__file__).resolve().parents[3] / "templates" / "agents"
+    return Path(__file__).resolve().parent / "data"
 
 
 def _user_templates_dir() -> Path:
@@ -82,7 +81,7 @@ def discover_templates(
     """Discover and load all agent templates from known directories.
 
     Search order:
-    1. Built-in templates shipped with the package (``templates/agents/``).
+    1. Built-in templates shipped with the package (``templates/data/``).
     2. User templates at ``~/.openjarvis/templates/agents/``.
     3. Any additional directories supplied via *extra_dirs*.
 
