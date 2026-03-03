@@ -108,6 +108,12 @@ class MemoryHandle:
                 self._backend.close()
             self._backend = None
 
+    def __enter__(self) -> MemoryHandle:
+        return self
+
+    def __exit__(self, *exc: Any) -> None:
+        self.close()
+
 
 class Jarvis:
     """High-level OpenJarvis SDK.
@@ -116,9 +122,13 @@ class Jarvis:
 
         from openjarvis import Jarvis
 
+        with Jarvis() as j:
+            response = j.ask("Hello, what can you do?")
+            print(response)
+
+        # Or without context manager:
         j = Jarvis()
-        response = j.ask("Hello, what can you do?")
-        print(response)
+        response = j.ask("Hello")
         j.close()
     """
 
@@ -478,6 +488,12 @@ class Jarvis:
                 pass
             self._audit_logger = None
         self._engine = None
+
+    def __enter__(self) -> Jarvis:
+        return self
+
+    def __exit__(self, *exc: Any) -> None:
+        self.close()
 
 
 __all__ = ["Jarvis", "JarvisSystem", "MemoryHandle", "SystemBuilder"]

@@ -274,6 +274,12 @@ class JarvisSystem:
         if self.trace_store and hasattr(self.trace_store, "close"):
             self.trace_store.close()
 
+    def __enter__(self) -> JarvisSystem:
+        return self
+
+    def __exit__(self, *exc: Any) -> None:
+        self.close()
+
 
 class SystemBuilder:
     """Config-driven fluent builder for JarvisSystem."""
