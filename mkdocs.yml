@@ -50,6 +50,11 @@ extra_css:
 
 plugins:
   - search
+  - gen-files:
+      scripts:
+        - docs/gen_ref_pages.py
+  - literate-nav:
+      nav_file: SUMMARY.md
   - mkdocstrings:
       default_handler: python
       handlers:
@@ -152,23 +157,7 @@ nav:
       - Design Principles: architecture/design-principles.md
       - Security: architecture/security.md
       - Channels: architecture/channels.md
-  - API Reference:
-      - api/index.md
-      - SDK (Jarvis): api/sdk.md
-      - Core: api/core.md
-      - Engine: api/engine.md
-      - Agents: api/agents.md
-      - Memory: api/memory.md
-      - Tools: api/tools.md
-      - Intelligence: api/intelligence.md
-      - Learning: api/learning.md
-      - Traces: api/traces.md
-      - Telemetry: api/telemetry.md
-      - Benchmarks: api/bench.md
-      - Evals: api/evals.md
-      - Server: api/server.md
-      - Security: api/security.md
-      - Channels: api/channels.md
+  - API Reference: api-reference/
   - Deployment:
       - Docker: deployment/docker.md
       - systemd (Linux): deployment/systemd.md
