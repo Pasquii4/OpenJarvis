@@ -11,8 +11,15 @@ OpenJarvis runs entirely on your hardware. Choose the interface that fits your w
 
 ## Desktop App
 
-The native desktop app bundles Ollama (the inference engine) and the OpenJarvis Python backend
-into a single installer. Download, open, and start chatting — no terminal required.
+The desktop app is a native window for the OpenJarvis chat UI. All inference and backend
+processing happens on your local machine — the app connects to the backend you start locally.
+
+!!! info "Backend required"
+    Start the backend before opening the desktop app. The quickstart script handles everything:
+    ```bash
+    git clone https://github.com/HazyResearch/OpenJarvis.git && cd OpenJarvis
+    ./scripts/quickstart.sh
+    ```
 
 ### Download
 
@@ -29,13 +36,14 @@ into a single installer. Download, open, and start chatting — no terminal requ
 
 ### What's included
 
-The desktop app ships with:
+The desktop app provides:
 
-- **Ollama** sidecar — inference engine runs automatically in the background
-- **OpenJarvis backend** — Python API server managed by the app
-- **Full chat UI** — same interface as the browser app
+- **Full chat UI** — same interface as the browser app, in a native window
 - **Energy monitoring** — real-time power consumption tracking
-- **Telemetry dashboard** — token throughput, latency, and cost comparison
+- **Telemetry dashboard** — token throughput, latency, and cost comparison vs. cloud models
+- **System tray** — quick access without keeping a terminal open
+
+The backend (Ollama, Python API server, inference) runs separately on your machine.
 
 ### Build from source
 

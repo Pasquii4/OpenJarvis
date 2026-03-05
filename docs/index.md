@@ -34,12 +34,24 @@ Everything runs on your hardware. Cloud APIs are optional.
 
 === "Desktop App"
 
-    Download the native desktop app — it bundles Ollama and the Python backend
-    so everything works out of the box.
+    The desktop app is a native window for the OpenJarvis UI.
+    The backend (Ollama + inference) runs on your machine — start it first, then open the app.
+
+    **Step 1.** Start the backend:
+
+    ```bash
+    git clone https://github.com/HazyResearch/OpenJarvis.git
+    cd OpenJarvis
+    ./scripts/quickstart.sh
+    ```
+
+    **Step 2.** Download and open the desktop app:
 
     [Download for macOS (Apple Silicon)](https://github.com/HazyResearch/OpenJarvis/releases/latest/download/OpenJarvis_aarch64.dmg){ .md-button .md-button--primary }
 
     Also available for [macOS (Intel)](https://github.com/HazyResearch/OpenJarvis/releases/latest/download/OpenJarvis_x64.dmg), [Windows](https://github.com/HazyResearch/OpenJarvis/releases/latest/download/OpenJarvis_x64-setup.exe), [Linux (DEB)](https://github.com/HazyResearch/OpenJarvis/releases/latest/download/OpenJarvis_amd64.deb), and [Linux (RPM)](https://github.com/HazyResearch/OpenJarvis/releases/latest/download/OpenJarvis_amd64.rpm). See the [Downloads](downloads.md) page for details.
+
+    The app connects to `http://localhost:8000` automatically.
 
 === "Python SDK"
 
