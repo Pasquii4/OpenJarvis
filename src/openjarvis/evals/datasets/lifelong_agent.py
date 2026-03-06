@@ -24,6 +24,12 @@ _SYSTEM_PROMPT = (
     "Previous tasks in this session may have modified the environment."
 )
 
+_KG_SYSTEM = (
+    "You are a knowledge graph reasoning agent. Answer the question by "
+    "analyzing the provided knowledge graph operations and entity information. "
+    "Reason through each step and provide the final answer directly."
+)
+
 
 class LifelongAgentDataset(DatasetProvider):
     """LifelongAgentBench sequential task learning benchmark."""
@@ -56,19 +62,27 @@ class LifelongAgentDataset(DatasetProvider):
         if not data_dir.exists():
             self._download(data_dir)
 
-        task_sequences = self._load_task_sequences(data_dir)
+        # Try Parquet first (HuggingFace format), then JSON/JSONL
+        records = self._load_from_parquet(data_dir)
+        if not records:
+            task_sequences = self._load_task_sequences(data_dir)
+            if seed is not None:
+                random.Random(seed).shuffle(task_sequences)
+            if max_samples is not None:
+                task_sequences = task_sequences[:max_samples]
+            self._episodes = []
+            self._records = []
+            for seq in task_sequences:
+                episode = self._sequence_to_episode(seq)
+                self._episodes.append(episode)
+                self._records.extend(episode)
+            return
 
         if seed is not None:
-            random.Random(seed).shuffle(task_sequences)
+            random.Random(seed).shuffle(records)
         if max_samples is not None:
-            task_sequences = task_sequences[:max_samples]
-
-        self._episodes = []
-        self._records = []
-        for seq in task_sequences:
-            episode = self._sequence_to_episode(seq)
-            self._episodes.append(episode)
-            self._records.extend(episode)
+            records = records[:max_samples]
+        self._records = records
 
     def iter_records(self) -> Iterable[EvalRecord]:
         return iter(self._records)
@@ -89,15 +103,214 @@ class LifelongAgentDataset(DatasetProvider):
             ) from exc
         data_dir.mkdir(parents=True, exist_ok=True)
         snapshot_download(
-            repo_id="LifelongAgentBench/LifelongAgentBench",
+            repo_id="csyq/LifelongAgentBench",
             repo_type="dataset",
             local_dir=str(data_dir),
+        )
+
+    def _load_from_parquet(self, data_dir: Path) -> List[EvalRecord]:
+        """Load records from Parquet files (HuggingFace dataset format)."""
+        parquet_files = list(data_dir.rglob("*.parquet"))
+        if not parquet_files:
+            return []
+
+        try:
+            import pandas as pd
+        except ImportError:
+            logger.warning("pandas required for Parquet loading")
+            return []
+
+        records: List[EvalRecord] = []
+        for pf in sorted(parquet_files):
+            subset_name = pf.parent.name
+            df = pd.read_parquet(pf)
+            logger.info("Loading %d rows from %s", len(df), pf)
+
+            for _, row in df.iterrows():
+                row_dict = row.to_dict()
+                if subset_name == "knowledge_graph":
+                    rec = self._kg_row_to_record(row_dict)
+                elif subset_name == "db_bench":
+                    rec = self._db_row_to_record(row_dict)
+                elif subset_name == "os_interaction":
+                    rec = self._os_row_to_record(row_dict)
+                else:
+                    rec = self._generic_row_to_record(row_dict, subset_name)
+                if rec is not None:
+                    records.append(rec)
+
+        return records
+
+    def _kg_row_to_record(self, row: Dict[str, Any]) -> Optional[EvalRecord]:
+        question = row.get("question", "")
+        if not question:
+            return None
+
+        qid = row.get("qid", row.get("sample_index", "unknown"))
+        entity_dict = row.get("entity_dict", {})
+        if isinstance(entity_dict, str):
+            try:
+                entity_dict = json.loads(entity_dict)
+            except (json.JSONDecodeError, TypeError):
+                entity_dict = {}
+
+        entity_desc = ""
+        if isinstance(entity_dict, dict) and entity_dict:
+            entities = "\n".join(
+                f"  - {name}: {mid}" for name, mid in entity_dict.items()
+            )
+            entity_desc = f"Entities:\n{entities}"
+
+        action_list = row.get("action_list", [])
+        action_desc = ""
+        if action_list:
+            if isinstance(action_list, str):
+                try:
+                    action_list = json.loads(action_list)
+                except (json.JSONDecodeError, TypeError):
+                    action_list = []
+            if isinstance(action_list, list) and action_list:
+                steps = "\n".join(f"  {i+1}. {a}" for i, a in enumerate(action_list))
+                action_desc = f"\n\nKG Operations:\n{steps}"
+
+        problem = (
+            f"{_KG_SYSTEM}\n\n"
+            f"{entity_desc}"
+            f"{action_desc}\n\n"
+            f"Question: {question}"
+        )
+
+        answer_list = row.get("answer_list", [])
+        if isinstance(answer_list, str):
+            try:
+                answer_list = json.loads(answer_list)
+            except (json.JSONDecodeError, TypeError):
+                answer_list = [answer_list]
+        reference = ", ".join(str(a) for a in answer_list) if answer_list else ""
+
+        return EvalRecord(
+            record_id=f"lifelong-kg-{qid}",
+            problem=problem,
+            reference=reference,
+            category="agentic",
+            subject="knowledge_graph",
+            metadata={
+                "subset": "knowledge_graph",
+                "qid": qid,
+                "action_list": action_list,
+                "skill_list": row.get("skill_list", []),
+            },
+        )
+
+    def _db_row_to_record(self, row: Dict[str, Any]) -> Optional[EvalRecord]:
+        instruction = row.get("instruction", "")
+        if not instruction:
+            return None
+
+        idx = row.get("sample_index", "unknown")
+        table_info = row.get("table_info", {})
+        if isinstance(table_info, str):
+            try:
+                table_info = json.loads(table_info)
+            except (json.JSONDecodeError, TypeError):
+                table_info = {}
+
+        table_ctx = ""
+        if isinstance(table_info, dict) and table_info:
+            tname = table_info.get("name", "unknown")
+            cols = table_info.get("column_info_list", [])
+            if cols:
+                col_desc = ", ".join(
+                    f"{c.get('name', '?')} ({c.get('type', '?')})" for c in cols
+                )
+                table_ctx = f"\n\nTable: {tname}\nColumns: {col_desc}"
+
+        problem = f"{_SYSTEM_PROMPT}\n\n## Task\n{instruction}{table_ctx}"
+
+        answer_info = row.get("answer_info", {})
+        if isinstance(answer_info, str):
+            try:
+                answer_info = json.loads(answer_info)
+            except (json.JSONDecodeError, TypeError):
+                answer_info = {}
+
+        reference = ""
+        if isinstance(answer_info, dict):
+            if answer_info.get("direct") is not None:
+                reference = str(answer_info["direct"])
+            elif answer_info.get("sql"):
+                reference = answer_info["sql"]
+            elif answer_info.get("md5"):
+                reference = answer_info["md5"]
+
+        return EvalRecord(
+            record_id=f"lifelong-db-{idx}",
+            problem=problem,
+            reference=reference,
+            category="agentic",
+            subject="database",
+            metadata={
+                "subset": "db_bench",
+                "sample_index": idx,
+                "skill_list": row.get("skill_list", []),
+            },
+        )
+
+    def _os_row_to_record(self, row: Dict[str, Any]) -> Optional[EvalRecord]:
+        instruction = row.get("instruction", "")
+        if not instruction:
+            return None
+
+        idx = row.get("sample_index", "unknown")
+        problem = f"{_SYSTEM_PROMPT}\n\n## Task\n{instruction}"
+
+        eval_info = row.get("evaluation_info", {})
+        if isinstance(eval_info, str):
+            try:
+                eval_info = json.loads(eval_info)
+            except (json.JSONDecodeError, TypeError):
+                eval_info = {}
+
+        reference = ""
+        if isinstance(eval_info, dict):
+            cmd_item = eval_info.get("evaluation_command_item", {})
+            if isinstance(cmd_item, dict):
+                reference = cmd_item.get("script", "")
+
+        return EvalRecord(
+            record_id=f"lifelong-os-{idx}",
+            problem=problem,
+            reference=reference,
+            category="agentic",
+            subject="os",
+            metadata={
+                "subset": "os_interaction",
+                "sample_index": idx,
+                "skill_list": row.get("skill_list", []),
+            },
+        )
+
+    def _generic_row_to_record(
+        self, row: Dict[str, Any], subset_name: str,
+    ) -> Optional[EvalRecord]:
+        instruction = row.get("instruction", row.get("question", row.get("task", "")))
+        if not instruction:
+            return None
+        idx = row.get("sample_index", row.get("id", "unknown"))
+        expected = row.get("answer", row.get("expected_output", ""))
+        return EvalRecord(
+            record_id=f"lifelong-{subset_name}-{idx}",
+            problem=f"{_SYSTEM_PROMPT}\n\n## Task\n{instruction}",
+            reference=str(expected),
+            category="agentic",
+            subject=subset_name,
+            metadata={"subset": subset_name, "sample_index": idx},
         )
 
     def _load_task_sequences(
         self, data_dir: Path,
     ) -> List[List[Dict[str, Any]]]:
-        """Load task sequences from disk."""
+        """Load task sequences from JSON/JSONL files (legacy format)."""
         sequences: List[List[Dict[str, Any]]] = []
 
         for p in sorted(data_dir.rglob("*.json")):
@@ -105,7 +318,6 @@ class LifelongAgentDataset(DatasetProvider):
                 with open(p) as f:
                     data = json.load(f)
                 if isinstance(data, list):
-                    # Could be a sequence of tasks or list of sequences
                     if data and isinstance(data[0], list):
                         sequences.extend(data)
                     elif data and isinstance(data[0], dict):

@@ -27,26 +27,32 @@ telemetry = true
 
 [[models]]
 name = "claude-opus-4-6"
+engine = "cloud"
 provider = "anthropic"
 
 [[models]]
 name = "claude-sonnet-4-6"
+engine = "cloud"
 provider = "anthropic"
 
 [[models]]
 name = "gpt-5.4"
+engine = "cloud"
 provider = "openai"
 
 [[models]]
 name = "gpt-5-mini"
+engine = "cloud"
 provider = "openai"
 
 [[models]]
 name = "gemini-3.1-pro-preview"
+engine = "cloud"
 provider = "google"
 
 [[models]]
 name = "gemini-3-flash-preview"
+engine = "cloud"
 provider = "google"
 
 # --- Benchmarks ---

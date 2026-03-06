@@ -230,12 +230,54 @@ class CloudEngine(InferenceEngine):
                 "ANTHROPIC_API_KEY and install "
                 "openjarvis[inference-cloud]"
             )
-        # Separate system message from conversation messages
+        # Separate system message and convert to Anthropic message format
         system_text = ""
         chat_msgs: List[Dict[str, Any]] = []
         for m in messages:
             if m.role.value == "system":
                 system_text = m.content
+            elif m.role.value == "tool":
+                # Anthropic expects tool results as role="user" with
+                # tool_result content blocks
+                tool_result_block = {
+                    "type": "tool_result",
+                    "tool_use_id": m.tool_call_id or "",
+                    "content": m.content,
+                }
+                # Merge consecutive tool results into a single user message
+                if (
+                    chat_msgs
+                    and chat_msgs[-1]["role"] == "user"
+                    and isinstance(chat_msgs[-1]["content"], list)
+                    and chat_msgs[-1]["content"]
+                    and chat_msgs[-1]["content"][-1].get("type") == "tool_result"
+                ):
+                    chat_msgs[-1]["content"].append(tool_result_block)
+                else:
+                    chat_msgs.append({
+                        "role": "user",
+                        "content": [tool_result_block],
+                    })
+            elif m.role.value == "assistant" and m.tool_calls:
+                # Convert assistant messages with tool_calls to Anthropic
+                # content blocks (text + tool_use)
+                content_blocks: List[Dict[str, Any]] = []
+                if m.content:
+                    content_blocks.append({"type": "text", "text": m.content})
+                for tc in m.tool_calls:
+                    args = tc.arguments
+                    if isinstance(args, str):
+                        try:
+                            args = json.loads(args)
+                        except (json.JSONDecodeError, TypeError):
+                            args = {"input": args}
+                    content_blocks.append({
+                        "type": "tool_use",
+                        "id": tc.id,
+                        "name": tc.name,
+                        "input": args if isinstance(args, dict) else {},
+                    })
+                chat_msgs.append({"role": "assistant", "content": content_blocks})
             else:
                 chat_msgs.append({"role": m.role.value, "content": m.content})
         create_kwargs: Dict[str, Any] = {
@@ -308,12 +350,50 @@ class CloudEngine(InferenceEngine):
                 "GEMINI_API_KEY or GOOGLE_API_KEY and install "
                 "openjarvis[inference-google]"
             )
-        # Build contents from messages
+        # Build contents from messages, converting tool roles for Gemini
         system_text = ""
         contents: List[Dict[str, Any]] = []
         for m in messages:
             if m.role.value == "system":
                 system_text = m.content
+            elif m.role.value == "tool":
+                # Gemini expects function responses as role="user" with
+                # function_response parts
+                fn_resp_part = {
+                    "function_response": {
+                        "name": m.name or "unknown",
+                        "response": {"result": m.content},
+                    }
+                }
+                # Merge consecutive tool results into a single user message
+                if (
+                    contents
+                    and contents[-1]["role"] == "user"
+                    and contents[-1]["parts"]
+                    and "function_response" in contents[-1]["parts"][-1]
+                ):
+                    contents[-1]["parts"].append(fn_resp_part)
+                else:
+                    contents.append({"role": "user", "parts": [fn_resp_part]})
+            elif m.role.value == "assistant" and m.tool_calls:
+                # Convert assistant tool_calls to function_call parts
+                parts: List[Dict[str, Any]] = []
+                if m.content:
+                    parts.append({"text": m.content})
+                for tc in m.tool_calls:
+                    args = tc.arguments
+                    if isinstance(args, str):
+                        try:
+                            args = json.loads(args)
+                        except (json.JSONDecodeError, TypeError):
+                            args = {"input": args}
+                    parts.append({
+                        "function_call": {
+                            "name": tc.name,
+                            "args": args if isinstance(args, dict) else {},
+                        }
+                    })
+                contents.append({"role": "model", "parts": parts})
             elif m.role.value == "assistant":
                 contents.append({"role": "model", "parts": [{"text": m.content}]})
             else:

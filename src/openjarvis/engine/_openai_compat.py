@@ -43,6 +43,7 @@ class _OpenAICompatibleEngine(InferenceEngine):
             "temperature": temperature,
             "max_tokens": max_tokens,
             "stream": False,
+            "chat_template_kwargs": {"enable_thinking": False},
             **kwargs,
         }
         try:
