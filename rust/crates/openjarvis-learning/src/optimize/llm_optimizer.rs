@@ -269,6 +269,7 @@ impl LLMOptimizer {
     // Prompt builders
     // ------------------------------------------------------------------
 
+    #[allow(clippy::vec_init_then_push)]
     fn build_initial_prompt(&self) -> String {
         let mut lines = Vec::new();
         lines.push("You are optimizing an OpenJarvis AI system configuration.".into());
@@ -299,6 +300,7 @@ impl LLMOptimizer {
         lines.join("\n")
     }
 
+    #[allow(clippy::vec_init_then_push)]
     fn build_propose_prompt(
         &self,
         history: &[TrialResult],
@@ -340,6 +342,7 @@ impl LLMOptimizer {
         lines.join("\n")
     }
 
+    #[allow(clippy::vec_init_then_push)]
     fn build_targeted_prompt(
         &self,
         history: &[TrialResult],
@@ -379,6 +382,7 @@ impl LLMOptimizer {
         lines.join("\n")
     }
 
+    #[allow(clippy::vec_init_then_push)]
     fn build_merge_prompt(
         &self,
         candidates: &[TrialResult],

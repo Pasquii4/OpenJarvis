@@ -74,7 +74,7 @@ impl TrainingDataMiner {
             .iter()
             .filter(|t| {
                 t.outcome == "success"
-                    && t.feedback.map_or(false, |f| f >= self.min_quality)
+                    && t.feedback.is_some_and(|f| f >= self.min_quality)
             })
             .collect()
     }

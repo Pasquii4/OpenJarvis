@@ -1,4 +1,5 @@
 //! PyO3 bridge — exposes ~50 Rust classes to Python via `openjarvis_rust`.
+#![allow(clippy::redundant_closure, unused_variables)]
 
 use once_cell::sync::Lazy;
 use pyo3::prelude::*;

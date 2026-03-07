@@ -290,7 +290,7 @@ impl OptimizationStore {
             .map_err(|e| OptimizeStoreError::Sqlite(e.to_string()))?;
 
         let rows = stmt
-            .query_map(params![run_id], |row| row_to_trial(row))
+            .query_map(params![run_id], row_to_trial)
             .map_err(|e| OptimizeStoreError::Sqlite(e.to_string()))?;
 
         let mut result = Vec::new();

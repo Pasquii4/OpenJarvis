@@ -88,6 +88,6 @@ mod tests {
     fn test_clamp_bounds() {
         let rf = HeuristicRewardFunction::default();
         let r = rf.compute(100.0, 1.0, 0, 0);
-        assert!(r >= 0.0 && r <= 1.0);
+        assert!((0.0..=1.0).contains(&r));
     }
 }

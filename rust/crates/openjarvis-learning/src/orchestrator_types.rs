@@ -250,7 +250,10 @@ mod tests {
     fn test_normalize_number() {
         assert_eq!(normalize_number("42"), Some(42.0));
         assert_eq!(normalize_number("1,234.0"), Some(1234.0));
-        assert_eq!(normalize_number("  3.14  "), Some(3.14));
+        #[allow(clippy::approx_constant)]
+        {
+            assert_eq!(normalize_number("  3.14  "), Some(3.14));
+        }
         assert!(normalize_number("not a number").is_none());
     }
 

@@ -331,7 +331,7 @@ mod tests {
             per_benchmark: vec![],
         };
 
-        let frontier = compute_pareto_frontier(&[trial.clone()], &default_objectives());
+        let frontier = compute_pareto_frontier(std::slice::from_ref(&trial), &default_objectives());
         assert_eq!(frontier.len(), 1);
         assert_eq!(frontier[0].trial_id, "t1");
     }

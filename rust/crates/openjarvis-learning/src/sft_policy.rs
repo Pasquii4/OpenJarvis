@@ -136,13 +136,13 @@ mod tests {
         assert_eq!(SFTRouterPolicy::classify_query("hello"), "short");
         assert_eq!(
             SFTRouterPolicy::classify_query(
-                &"word ".repeat(101).trim().to_string()
+                "word ".repeat(101).trim()
             ),
             "long"
         );
         assert_eq!(
             SFTRouterPolicy::classify_query(
-                &"word ".repeat(50).trim().to_string()
+                "word ".repeat(50).trim()
             ),
             "general"
         );
@@ -174,6 +174,6 @@ mod tests {
         ];
         policy.update_from_data(&traces);
         let map = policy.policy_map();
-        assert!(map.get("code").is_none(), "should not update with < min_samples");
+        assert!(!map.contains_key("code"), "should not update with < min_samples");
     }
 }

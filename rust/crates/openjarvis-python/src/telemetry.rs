@@ -112,6 +112,7 @@ pub struct PyTelemetrySample {
 impl PyTelemetrySample {
     #[new]
     #[pyo3(signature = (timestamp_ns, gpu_power_w=0.0, cpu_power_w=0.0, gpu_energy_j=0.0, cpu_energy_j=0.0, gpu_util_pct=0.0, gpu_temp_c=0.0, gpu_mem_gb=0.0))]
+    #[allow(clippy::too_many_arguments)]
     fn new(
         timestamp_ns: u64,
         gpu_power_w: f64,

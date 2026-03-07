@@ -111,10 +111,10 @@ impl TraceDrivenPolicy {
         let conf = self.confidence.read();
 
         if let Some(model) = map.get(qclass) {
-            if conf.get(qclass).copied().unwrap_or(0) >= self.min_samples {
-                if self.available.is_empty() || self.available.contains(model) {
-                    return model.clone();
-                }
+            if conf.get(qclass).copied().unwrap_or(0) >= self.min_samples
+                && (self.available.is_empty() || self.available.contains(model))
+            {
+                return model.clone();
             }
         }
         drop(map);
@@ -294,7 +294,7 @@ mod tests {
     #[test]
     fn test_update_and_select() {
         let policy = TraceDrivenPolicy::new(vec![], "default".into(), "fallback".into());
-        policy.min_samples;
+        let _ = policy.min_samples;
 
         let traces: Vec<(String, String, String, f64, Option<f64>)> = (0..10)
             .map(|_| {

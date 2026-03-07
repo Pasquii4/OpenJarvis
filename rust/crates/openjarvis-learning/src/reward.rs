@@ -163,6 +163,7 @@ pub struct AdaptiveRewardWeights {
 }
 
 impl AdaptiveRewardWeights {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         initial_alpha: f64,
         final_alpha: f64,

@@ -384,6 +384,7 @@ mod tests {
 
     #[test]
     fn test_embedding_roundtrip() {
+        #[allow(clippy::approx_constant)]
         let emb = vec![1.0, -2.5, 3.14, 0.0];
         let bytes = embedding_to_bytes(&emb);
         let recovered = bytes_to_embedding(&bytes);

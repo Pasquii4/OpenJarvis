@@ -362,18 +362,13 @@ pub struct TrialResult {
 // ---------------------------------------------------------------------------
 
 /// Status of an optimization run.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum RunStatus {
+    #[default]
     Running,
     Completed,
     Failed,
-}
-
-impl Default for RunStatus {
-    fn default() -> Self {
-        RunStatus::Running
-    }
 }
 
 impl std::fmt::Display for RunStatus {
