@@ -41,6 +41,8 @@ KNOWN_BENCHMARKS = {
     "terminalbench", "terminalbench-native",
     "email_triage", "morning_brief", "research_mining",
     "knowledge_base", "coding_task",
+    "coding_assistant", "security_scanner", "daily_digest",
+    "doc_qa", "browser_assistant",
 }
 
 
