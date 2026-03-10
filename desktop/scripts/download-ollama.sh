@@ -40,6 +40,9 @@ else
                 *)       echo "Unsupported arch: $ARCH"; exit 1 ;;
             esac
             ;;
+        MINGW*|MSYS*|CYGWIN*|Windows_NT)
+            TARGET="x86_64-pc-windows-msvc"
+            ;;
         *)
             echo "Unsupported OS: $OS"; exit 1 ;;
     esac
