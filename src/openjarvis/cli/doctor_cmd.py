@@ -211,20 +211,26 @@ def _check_optional_deps() -> List[CheckResult]:
     """Check availability of optional dependency packages."""
     results: List[CheckResult] = []
     optional_packages = [
-        ("fastapi", "openjarvis[server]"),
-        ("torch", "torch (for learning)"),
-        ("pynvml", "pynvml (GPU monitoring)"),
-        ("amdsmi", "openjarvis[energy-amd]"),
-        ("colbert", "openjarvis[memory-colbert]"),
-        ("zeus", "openjarvis[energy-apple]"),
+        ("fastapi", "openjarvis[server]", "REST API server"),
+        ("torch", "pip install torch", "SFT/GRPO training"),
+        ("pynvml", "openjarvis[energy-nvidia]", "NVIDIA energy monitoring"),
+        ("amdsmi", "openjarvis[energy-amd]", "AMD energy monitoring"),
+        ("colbert", "openjarvis[memory-colbert]", "ColBERT memory backend"),
+        ("zeus", "openjarvis[energy-apple]", "Apple Silicon energy monitoring"),
     ]
-    for pkg, label in optional_packages:
+    for pkg, install_hint, description in optional_packages:
         try:
             __import__(pkg)
-            results.append(CheckResult(f"Optional: {label}", "ok", "Installed"))
+            results.append(
+                CheckResult(f"Optional: {description}", "ok", "Installed")
+            )
         except Exception:
             results.append(
-                CheckResult(f"Optional: {label}", "warn", "Not installed")
+                CheckResult(
+                    f"Optional: {description}",
+                    "warn",
+                    f"Not installed ({install_hint})",
+                )
             )
     return results
 
