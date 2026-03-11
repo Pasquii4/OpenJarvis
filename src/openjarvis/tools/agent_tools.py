@@ -9,6 +9,7 @@ query or terminate running agents.
 from __future__ import annotations
 
 import json
+import logging
 import time
 import uuid
 from typing import Any, Dict
@@ -16,6 +17,8 @@ from typing import Any, Dict
 from openjarvis.core.registry import ToolRegistry
 from openjarvis.core.types import ToolResult
 from openjarvis.tools._stubs import BaseTool, ToolSpec
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Module-level state — tracks spawned agents
@@ -195,8 +198,8 @@ class AgentSendTool(BaseTool):
                     "message": message,
                 },
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("Event bus publish failed for agent_send: %s", exc)
 
         return ToolResult(
             tool_name="agent_send",

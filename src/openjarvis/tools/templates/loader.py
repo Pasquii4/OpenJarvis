@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import json
+import logging
 import subprocess
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from openjarvis.core.types import ToolResult
 from openjarvis.tools._stubs import BaseTool, ToolSpec
+
+logger = logging.getLogger(__name__)
 
 try:
     import tomllib
@@ -185,8 +188,8 @@ def discover_templates(
     for path in sorted(directory.glob("*.toml")):
         try:
             templates.append(load_template(path))
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("Skipping unparseable template %s: %s", path, exc)
     return templates
 
 

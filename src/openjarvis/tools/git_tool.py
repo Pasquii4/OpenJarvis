@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import shutil
 import subprocess
 from typing import Any
@@ -10,6 +11,8 @@ from openjarvis._rust_bridge import get_rust_module
 from openjarvis.core.registry import ToolRegistry
 from openjarvis.core.types import ToolResult
 from openjarvis.tools._stubs import BaseTool, ToolSpec
+
+logger = logging.getLogger(__name__)
 
 # Maximum output size (50 KB)
 _MAX_OUTPUT_BYTES = 50 * 1024
@@ -381,8 +384,8 @@ class GitLogTool(BaseTool):
                 success=True,
                 metadata={"returncode": 0},
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("Rust git_log fallback to CLI: %s", exc)
 
         cmd = ["git", "log", f"-{count}"]
         if oneline:

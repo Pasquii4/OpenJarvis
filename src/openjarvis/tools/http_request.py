@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import time
 from typing import Any
 
@@ -11,6 +12,8 @@ from openjarvis.core.registry import ToolRegistry
 from openjarvis.core.types import ToolResult
 from openjarvis.security.ssrf import check_ssrf
 from openjarvis.tools._stubs import BaseTool, ToolSpec
+
+logger = logging.getLogger(__name__)
 
 # Maximum response body size: 1 MB
 _MAX_RESPONSE_BYTES = 1_048_576
@@ -118,8 +121,8 @@ class HttpRequestTool(BaseTool):
                         "truncated": len(content) > _MAX_RESPONSE_BYTES,
                     },
                 )
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Rust HTTP request fallback to httpx: %s", exc)
 
         try:
             t0 = time.time()
