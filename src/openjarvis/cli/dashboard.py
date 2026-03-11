@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any, Dict, List, Optional
+
+logger = logging.getLogger(__name__)
 
 
 class DashboardApp:
@@ -117,8 +120,8 @@ class DashboardApp:
                             events_log.write_line(
                                 f"[{event.event_type.value}] {event.data}"
                             )
-                        except Exception:
-                            pass
+                        except Exception as exc:
+                            logger.debug("Event serialization failed: %s", exc)
 
                     from openjarvis.core.events import EventType
                     for et in EventType:

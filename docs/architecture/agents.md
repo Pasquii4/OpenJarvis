@@ -112,6 +112,23 @@ All tool-using agents (`OrchestratorAgent`, `NativeReActAgent`, `NativeOpenHands
 
 ---
 
+## Choosing an Agent
+
+Start here. Pick the simplest agent that handles your task — simpler agents are faster, use fewer tokens, and are easier to debug. Reach for more complex agents only when the task demands it.
+
+| Use case | Agent | Why |
+|---|---|---|
+| Simple Q&A, single-turn | `simple` | No overhead, one inference call |
+| Multi-step with tools (calculator, search, files) | `orchestrator` | Function-calling loop, most compatible with OpenAI-format models |
+| Explicit reasoning chains | `native_react` | Thought-Action-Observation loop based on [ReAct (Yao et al., 2023)](https://arxiv.org/abs/2210.03629); reasoning traces are visible and debuggable |
+| Code generation + execution | `native_openhands` | CodeAct pattern inspired by [OpenHands (Wang et al., 2024)](https://arxiv.org/abs/2407.16741); generates and executes Python inline |
+| Long documents, recursive decomposition | `rlm` | Stores context in a persistent REPL, decomposes via recursive sub-LM calls |
+| Untrusted inputs | `sandboxed` wrapping any agent | Container isolation with network disabled and mount allowlists |
+
+**General guidance:** `orchestrator` is the default for most tool-using tasks. Use `native_react` when you want visible reasoning traces (e.g., for debugging or auditing agent behavior). Use `native_openhands` when the task involves writing and running code. Use `rlm` when context is too long to fit in a single prompt window.
+
+---
+
 ## Agent Implementations
 
 ### SimpleAgent

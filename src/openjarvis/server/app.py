@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import pathlib
 import time
 
@@ -13,6 +14,8 @@ from openjarvis.server.api_routes import include_all_routes
 from openjarvis.server.comparison import comparison_router
 from openjarvis.server.dashboard import dashboard_router
 from openjarvis.server.routes import router
+
+logger = logging.getLogger(__name__)
 
 # No-cache headers applied to static file responses
 _NO_CACHE_HEADERS = {
@@ -99,8 +102,8 @@ def create_app(
                     scan_output=config.security.scan_output,
                     bus=bus,
                 )
-        except Exception:
-            pass  # security is best-effort
+        except Exception as exc:
+            logger.debug("Security guardrails init skipped: %s", exc)
 
     app = FastAPI(
         title="OpenJarvis API",
@@ -133,8 +136,8 @@ def create_app(
         middleware_cls = create_security_middleware()
         if middleware_cls is not None:
             app.add_middleware(middleware_cls)
-    except Exception:
-        pass  # middleware is best-effort
+    except Exception as exc:
+        logger.debug("Security middleware init skipped: %s", exc)
 
     # Serve static frontend assets if the static/ directory exists
     static_dir = pathlib.Path(__file__).parent / "static"

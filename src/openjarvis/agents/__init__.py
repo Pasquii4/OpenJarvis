@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import logging
+
 from openjarvis.agents._stubs import (
     AgentContext,
     AgentResult,
     BaseAgent,
     ToolUsingAgent,
 )
+
+logger = logging.getLogger(__name__)
 
 # Import agent modules to trigger @AgentRegistry.register() decorators
 try:
@@ -71,7 +75,7 @@ try:
 
     if AgentRegistry.contains("native_react") and not AgentRegistry.contains("react"):
         AgentRegistry.register_value("react", AgentRegistry.get("native_react"))
-except Exception:
-    pass
+except Exception as exc:
+    logger.debug("Registry alias 'react' creation skipped: %s", exc)
 
 __all__ = ["AgentContext", "AgentResult", "BaseAgent", "ToolUsingAgent"]

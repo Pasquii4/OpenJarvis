@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json as json_mod
+import logging
 import sys
 from typing import TYPE_CHECKING
 
@@ -17,6 +18,8 @@ from openjarvis.core.config import load_config
 if TYPE_CHECKING:
     from openjarvis.bench._stubs import BenchmarkResult
 from openjarvis.engine import get_engine
+
+logger = logging.getLogger(__name__)
 
 _BANNER = r"""
   ___                       _                  _
@@ -219,8 +222,8 @@ def run(
             energy_monitor = create_energy_monitor(
                 prefer_vendor=config.telemetry.energy_vendor or None,
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("Energy monitor init skipped: %s", exc)
 
     # Banner + configuration
     _print_banner(console)
@@ -269,5 +272,5 @@ def run(
     if energy_monitor is not None:
         try:
             energy_monitor.close()
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("Energy monitor cleanup failed: %s", exc)
