@@ -48,6 +48,14 @@ class MemoryHandle:
             self._backend = MemoryRegistry.create(
                 key, db_path=self._config.memory.db_path,
             )
+        elif key == "synapse":
+            self._backend = MemoryRegistry.create(
+                key,
+                url=self._config.memory.synapse_url,
+                store_event=self._config.memory.synapse_store_event,
+                retrieve_query=self._config.memory.synapse_retrieve_query,
+                delete_event=self._config.memory.synapse_delete_event,
+            )
         else:
             self._backend = MemoryRegistry.create(key)
         return self._backend
@@ -170,7 +178,6 @@ class Jarvis:
         self._bus = EventBus()
         self._telem_store: Optional[TelemetryStore] = None
         self._audit_logger: Any = None
-        self._capability_policy: Any = None
         self.memory = MemoryHandle(self._config)
 
         # Set up telemetry
@@ -180,6 +187,18 @@ class Jarvis:
                 self._telem_store.subscribe_to_bus(self._bus)
             except Exception as exc:
                 logger.warning("Failed to initialize telemetry store: %s", exc)
+
+        # Set up security audit logger
+        if self._config.security.enabled:
+            try:
+                from openjarvis.security.audit import AuditLogger
+
+                self._audit_logger = AuditLogger(
+                    db_path=self._config.security.audit_log_path,
+                    bus=self._bus,
+                )
+            except Exception as exc:
+                logger.warning("Failed to initialize security audit logger: %s", exc)
 
     @property
     def config(self) -> JarvisConfig:
@@ -212,12 +231,30 @@ class Jarvis:
             )
         self._resolved_engine_key, engine = resolved
 
-        # Apply security guardrails
-        from openjarvis.security import setup_security
-        sec = setup_security(self._config, engine, self._bus)
-        engine = sec.engine
-        self._audit_logger = sec.audit_logger
-        self._capability_policy = sec.capability_policy
+        # Wrap engine with security guardrails if configured
+        if self._config.security.enabled:
+            try:
+                from openjarvis.security.guardrails import GuardrailsEngine
+                from openjarvis.security.scanner import PIIScanner, SecretScanner
+                from openjarvis.security.types import RedactionMode
+
+                scanners = []
+                if self._config.security.secret_scanner:
+                    scanners.append(SecretScanner())
+                if self._config.security.pii_scanner:
+                    scanners.append(PIIScanner())
+                if scanners:
+                    mode = RedactionMode(self._config.security.mode)
+                    engine = GuardrailsEngine(
+                        engine,
+                        scanners=scanners,
+                        mode=mode,
+                        scan_input=self._config.security.scan_input,
+                        scan_output=self._config.security.scan_output,
+                        bus=self._bus,
+                    )
+            except Exception as exc:
+                logger.debug("Failed to set up security guardrails: %s", exc)
 
         # Wrap engine with InstrumentedEngine for telemetry + energy
         energy_monitor = None
@@ -468,9 +505,6 @@ class Jarvis:
         if getattr(agent_cls, "accepts_tools", False):
             agent_kwargs["tools"] = tool_objects
             agent_kwargs["max_turns"] = self._config.agent.max_turns
-
-        if self._capability_policy is not None:
-            agent_kwargs["capability_policy"] = self._capability_policy
 
         agent_obj = agent_cls(self._engine, model_name, **agent_kwargs)
         ctx = AgentContext()

@@ -257,7 +257,7 @@ def recommend_model(hw: HardwareInfo, engine: str) -> str:
 class OllamaEngineConfig:
     """Per-engine config for Ollama."""
 
-    host: str = ""
+    host: str = "http://localhost:11434"
 
 
 @dataclass(slots=True)
@@ -315,7 +315,7 @@ class NexaEngineConfig:
 class UzuEngineConfig:
     """Per-engine config for Uzu."""
 
-    host: str = "http://localhost:8000"
+    host: str = "http://localhost:8080"
 
 
 @dataclass(slots=True)
@@ -466,111 +466,24 @@ class IntelligenceConfig:
 class RoutingLearningConfig:
     """Routing sub-policy config within Learning."""
 
-    policy: str = "heuristic"   # heuristic | learned
+    policy: str = "heuristic"   # heuristic | learned | grpo
     min_samples: int = 5        # Min traces before trusting learned routing
-
-
-@dataclass(slots=True)
-class SFTConfig:
-    """General-purpose SFT training config. Maps to [learning.intelligence.sft]."""
-
-    model_name: str = "Qwen/Qwen3-1.7B"
-    max_seq_length: int = 4096
-    num_epochs: int = 3
-    batch_size: int = 8
-    learning_rate: float = 2e-5
-    weight_decay: float = 0.01
-    warmup_ratio: float = 0.1
-    max_grad_norm: float = 1.0
-    gradient_checkpointing: bool = True
-    use_lora: bool = True
-    lora_rank: int = 16
-    lora_alpha: int = 32
-    lora_dropout: float = 0.05
-    target_modules: str = "q_proj,v_proj"  # comma-separated for TOML compat
-    use_4bit: bool = False
-    checkpoint_dir: str = "checkpoints/sft"
-    min_pairs: int = 10
-    agent_filter: str = ""
-
-
-@dataclass(slots=True)
-class GRPOConfig:
-    """General-purpose GRPO training config. Maps to [learning.intelligence.grpo]."""
-
-    model_name: str = "Qwen/Qwen3-1.7B"
-    max_seq_length: int = 4096
-    max_response_length: int = 2048
-    num_epochs: int = 10
-    batch_size: int = 16
-    learning_rate: float = 1e-6
-    max_grad_norm: float = 1.0
-    gradient_checkpointing: bool = True
-    num_samples_per_prompt: int = 8
-    temperature: float = 1.0
-    kl_coef: float = 0.0001
-    clip_ratio: float = 0.2
-    use_8bit_ref: bool = True
-    checkpoint_dir: str = "checkpoints/grpo"
-    save_every_n_epochs: int = 1
-    keep_last_n: int = 3
-    min_prompts: int = 10
-    agent_filter: str = ""
-
-
-@dataclass(slots=True)
-class DSPyOptimizerConfig:
-    """DSPy agent optimizer config. Maps to [learning.agent.dspy]."""
-
-    optimizer: str = "BootstrapFewShotWithRandomSearch"
-    task_lm: str = ""
-    teacher_lm: str = ""
-    max_bootstrapped_demos: int = 4
-    max_labeled_demos: int = 4
-    num_candidate_programs: int = 10
-    max_rounds: int = 1
-    optimize_system_prompt: bool = True
-    optimize_few_shot: bool = True
-    optimize_tool_descriptions: bool = True
-    min_traces: int = 20
-    metric_threshold: float = 0.7
-    agent_filter: str = ""
-    config_dir: str = ""
-
-
-@dataclass(slots=True)
-class GEPAOptimizerConfig:
-    """GEPA agent optimizer config. Maps to [learning.agent.gepa]."""
-
-    reflection_lm: str = ""
-    max_metric_calls: int = 150
-    population_size: int = 10
-    optimize_system_prompt: bool = True
-    optimize_tools: bool = True
-    optimize_max_turns: bool = True
-    optimize_temperature: bool = True
-    min_traces: int = 20
-    assessment_batch_size: int = 10
-    agent_filter: str = ""
-    config_dir: str = ""
 
 
 @dataclass(slots=True)
 class IntelligenceLearningConfig:
     """Intelligence sub-policy config within Learning."""
 
-    policy: str = "none"  # none | sft | grpo
-    sft: SFTConfig = field(default_factory=SFTConfig)
-    grpo: GRPOConfig = field(default_factory=GRPOConfig)
+    policy: str = "none"  # none | sft
 
 
 @dataclass(slots=True)
 class AgentLearningConfig:
     """Agent sub-policy config within Learning."""
 
-    policy: str = "none"  # none | dspy | gepa
-    dspy: DSPyOptimizerConfig = field(default_factory=DSPyOptimizerConfig)
-    gepa: GEPAOptimizerConfig = field(default_factory=GEPAOptimizerConfig)
+    policy: str = "none"  # none | agent_advisor | icl_updater
+    max_icl_examples: int = 20
+    advisor_confidence_threshold: float = 0.7
 
 
 @dataclass(slots=True)
@@ -588,8 +501,8 @@ class LearningConfig:
     """Learning system settings with per-primitive sub-policies."""
 
     enabled: bool = False
-    update_interval: int = 100
-    auto_update: bool = False
+    update_interval: int = 100  # traces between automatic policy updates
+    auto_update: bool = False   # auto-trigger updates on interval
     routing: RoutingLearningConfig = field(default_factory=RoutingLearningConfig)
     intelligence: IntelligenceLearningConfig = field(
         default_factory=IntelligenceLearningConfig,
@@ -599,7 +512,10 @@ class LearningConfig:
 
     # Training pipeline
     training_enabled: bool = False
-    training_schedule: str = ""
+    training_schedule: str = ""  # cron expression or empty for on-demand
+    lora_rank: int = 16
+    lora_alpha: int = 32
+    min_sft_pairs: int = 50
     min_improvement: float = 0.02
 
     # Backward-compat properties for old flat field names
@@ -676,6 +592,10 @@ class StorageConfig:
     context_max_tokens: int = 2048
     chunk_size: int = 512
     chunk_overlap: int = 64
+    synapse_url: str = "http://localhost:8080"
+    synapse_store_event: str = "store"
+    synapse_retrieve_query: str = "Retrieve"
+    synapse_delete_event: str = "delete"
 
 
 # Backward-compatibility alias
@@ -1055,45 +975,6 @@ class AgentManagerConfig:
     db_path: str = str(DEFAULT_CONFIG_DIR / "agents.db")
 
 
-@dataclass(slots=True)
-class MemoryFilesConfig:
-    """Persistent memory-file paths and nudge settings."""
-
-    soul_path: str = "~/.openjarvis/SOUL.md"
-    memory_path: str = "~/.openjarvis/MEMORY.md"
-    user_path: str = "~/.openjarvis/USER.md"
-    nudge_interval: int = 10
-
-
-@dataclass(slots=True)
-class SystemPromptConfig:
-    """Limits and strategy for system-prompt assembly."""
-
-    soul_max_chars: int = 4000
-    memory_max_chars: int = 2500
-    user_max_chars: int = 1500
-    skill_desc_max_chars: int = 60
-    truncation_strategy: str = "head_tail"
-
-
-@dataclass(slots=True)
-class CompressionConfig:
-    """Configuration for context compression."""
-
-    enabled: bool = True
-    threshold: float = 0.50
-    strategy: str = "session_consolidation"
-
-
-@dataclass(slots=True)
-class SkillsConfig:
-    """Configuration for agent-authored procedural skills."""
-
-    skills_dir: str = "~/.openjarvis/skills/"
-    nudge_interval: int = 15
-    auto_discover: bool = True
-
-
 @dataclass
 class JarvisConfig:
     """Top-level configuration for OpenJarvis."""
@@ -1118,10 +999,6 @@ class JarvisConfig:
     speech: SpeechConfig = field(default_factory=SpeechConfig)
     optimize: OptimizeConfig = field(default_factory=OptimizeConfig)
     agent_manager: AgentManagerConfig = field(default_factory=AgentManagerConfig)
-    memory_files: MemoryFilesConfig = field(default_factory=MemoryFilesConfig)
-    system_prompt: SystemPromptConfig = field(default_factory=SystemPromptConfig)
-    compression: CompressionConfig = field(default_factory=CompressionConfig)
-    skills: SkillsConfig = field(default_factory=SkillsConfig)
 
     @property
     def memory(self) -> StorageConfig:
@@ -1242,9 +1119,9 @@ def load_config(path: Optional[Path] = None) -> JarvisConfig:
 # ---------------------------------------------------------------------------
 
 
-def generate_minimal_toml(hw: HardwareInfo, engine: str | None = None) -> str:
+def generate_minimal_toml(hw: HardwareInfo) -> str:
     """Render a minimal TOML config with only essential settings."""
-    engine = engine or recommend_engine(hw)
+    engine = recommend_engine(hw)
     model = recommend_model(hw, engine)
     gpu_comment = ""
     if hw.gpu:
@@ -1274,9 +1151,9 @@ enabled = ["code_interpreter", "web_search", "file_read", "shell_exec"]
 """
 
 
-def generate_default_toml(hw: HardwareInfo, engine: str | None = None) -> str:
+def generate_default_toml(hw: HardwareInfo) -> str:
     """Render a commented TOML string suitable for ``~/.openjarvis/config.toml``."""
-    engine = engine or recommend_engine(hw)
+    engine = recommend_engine(hw)
     model = recommend_model(hw, engine)
     gpu_line = ""
     if hw.gpu:

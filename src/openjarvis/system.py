@@ -42,7 +42,6 @@ class JarvisSystem:
     workflow_engine: Optional[Any] = None  # WorkflowEngine
     session_store: Optional[Any] = None  # SessionStore
     capability_policy: Optional[Any] = None  # CapabilityPolicy
-    audit_logger: Optional[Any] = None  # AuditLogger
     operator_manager: Optional[Any] = None  # OperatorManager
     agent_manager: Optional[Any] = None  # AgentManager
     agent_scheduler: Optional[Any] = None  # AgentScheduler
@@ -149,8 +148,6 @@ class JarvisSystem:
             agent_kwargs["max_turns"] = self.config.agent.max_turns
         if system_prompt is not None:
             agent_kwargs["system_prompt"] = system_prompt
-        if self.capability_policy is not None:
-            agent_kwargs["capability_policy"] = self.capability_policy
         if operator_id is not None:
             agent_kwargs["operator_id"] = operator_id
             agent_kwargs["session_store"] = self.session_store
@@ -423,9 +420,7 @@ class SystemBuilder:
                     pass
 
         # Apply security guardrails FIRST (innermost wrapper)
-        from openjarvis.security import setup_security
-        sec = setup_security(config, engine, bus)
-        engine = sec.engine
+        engine = self._apply_security(config, engine, bus)
 
         # Then wrap with InstrumentedEngine (outermost wrapper)
         if telemetry_enabled:
@@ -474,7 +469,7 @@ class SystemBuilder:
         session_store = self._setup_sessions(config)
 
         # Set up capability policy
-        capability_policy = sec.capability_policy
+        capability_policy = self._setup_capabilities(config)
 
         # Set up learning orchestrator (when training is enabled)
         learning_orchestrator = self._setup_learning_orchestrator(config)
@@ -542,7 +537,6 @@ class SystemBuilder:
             workflow_engine=workflow_engine,
             session_store=session_store,
             capability_policy=capability_policy,
-            audit_logger=sec.audit_logger,
             agent_manager=agent_manager,
             agent_scheduler=agent_scheduler,
             agent_executor=agent_executor,
@@ -585,6 +579,36 @@ class SystemBuilder:
 
         return config.intelligence.fallback_model or ""
 
+    def _apply_security(self, config, engine, bus):
+        """Wrap engine with security guardrails if enabled."""
+        if config.security.enabled:
+            try:
+                from openjarvis.security.guardrails import GuardrailsEngine
+                from openjarvis.security.scanner import PIIScanner, SecretScanner
+                from openjarvis.security.types import RedactionMode
+
+                scanners = []
+                if config.security.secret_scanner:
+                    scanners.append(SecretScanner())
+                if config.security.pii_scanner:
+                    scanners.append(PIIScanner())
+
+                if scanners:
+                    mode_map = {
+                        "warn": RedactionMode.WARN,
+                        "redact": RedactionMode.REDACT,
+                        "block": RedactionMode.BLOCK,
+                    }
+                    mode = mode_map.get(config.security.mode, RedactionMode.WARN)
+                    engine = GuardrailsEngine(
+                        engine, scanners, mode=mode, bus=bus,
+                        scan_input=config.security.scan_input,
+                        scan_output=config.security.scan_output,
+                    )
+            except Exception as exc:
+                logger.warning("Failed to set up security guardrails: %s", exc)
+        return engine
+
     def _setup_telemetry(self, config, bus):
         """Set up telemetry store."""
         try:
@@ -605,6 +629,14 @@ class SystemBuilder:
 
             key = config.memory.default_backend
             if MemoryRegistry.contains(key):
+                if key == "synapse":
+                    return MemoryRegistry.create(
+                        key,
+                        url=config.memory.synapse_url,
+                        store_event=config.memory.synapse_store_event,
+                        retrieve_query=config.memory.synapse_retrieve_query,
+                        delete_event=config.memory.synapse_delete_event,
+                    )
                 return MemoryRegistry.create(key, db_path=config.memory.db_path)
         except Exception as exc:
             logger.warning("Failed to resolve memory backend: %s", exc)
@@ -752,12 +784,7 @@ class SystemBuilder:
         if tool_names is None:
             raw = config.tools.enabled or config.agent.tools
             if raw:
-                if isinstance(raw, list):
-                    tool_names = [
-                        n.strip() for n in raw if isinstance(n, str) and n.strip()
-                    ]
-                else:
-                    tool_names = [n.strip() for n in raw.split(",") if n.strip()]
+                tool_names = [n.strip() for n in raw.split(",") if n.strip()]
             else:
                 tool_names = []
 
@@ -913,6 +940,21 @@ class SystemBuilder:
             return None
 
     @staticmethod
+    def _setup_capabilities(config):
+        """Set up capability policy if enabled."""
+        if not config.security.capabilities.enabled:
+            return None
+        try:
+            from openjarvis.security.capabilities import CapabilityPolicy
+
+            return CapabilityPolicy(
+                policy_path=config.security.capabilities.policy_path or None,
+            )
+        except Exception as exc:
+            logger.warning("Failed to set up capability policy: %s", exc)
+            return None
+
+    @staticmethod
     def _setup_learning_orchestrator(config: JarvisConfig):
         """Set up LearningOrchestrator when training is enabled."""
         if not config.learning.training_enabled:
@@ -928,17 +970,16 @@ class SystemBuilder:
             trace_store = TraceStore(db_path=config.traces.db_path)
             config_dir = DEFAULT_CONFIG_DIR / "agent_configs"
 
-            sft_cfg = config.learning.intelligence.sft
             lora_config = LoRATrainingConfig(
-                lora_rank=sft_cfg.lora_rank,
-                lora_alpha=sft_cfg.lora_alpha,
+                lora_rank=config.learning.lora_rank,
+                lora_alpha=config.learning.lora_alpha,
             )
 
             return LearningOrchestrator(
                 trace_store=trace_store,
                 config_dir=config_dir,
                 min_improvement=config.learning.min_improvement,
-                min_sft_pairs=sft_cfg.min_pairs,
+                min_sft_pairs=config.learning.min_sft_pairs,
                 lora_config=lora_config,
             )
         except Exception as exc:
