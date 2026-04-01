@@ -193,9 +193,12 @@ class JarvisSystem:
 
         self.bus.subscribe(EventType.INFERENCE_END, _on_inference_end)
 
-        # Run — wrap with TraceCollector when tracing is enabled
+        # Run — wrap with TraceCollector when tracing is enabled.
+        # Check trace_store (set at build time) instead of config.traces.enabled
+        # because the shared config singleton can be mutated by other SystemBuilder
+        # instances (e.g. the judge backend).
         try:
-            if self.config.traces.enabled:
+            if self.trace_store is not None:
                 from openjarvis.traces.collector import TraceCollector
 
                 collector = TraceCollector(
