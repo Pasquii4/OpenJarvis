@@ -12,7 +12,7 @@ from __future__ import annotations
 import logging
 import os
 import time
-from collections.abc import Sequence
+from collections.abc import AsyncIterator, Sequence
 from typing import Any, Dict, List
 
 from openjarvis.core.registry import EngineRegistry
@@ -22,6 +22,7 @@ from openjarvis.engine._base import (
     InferenceEngine,
     messages_to_dicts,
 )
+from openjarvis.engine._stubs import StreamChunk
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +30,7 @@ logger = logging.getLogger(__name__)
 GROQ_MODELS = [
     "llama-3.3-70b-versatile",  # Default — best quality/speed ratio
     "llama-3.1-8b-instant",  # Fallback — fast for simple tasks
+    "gemma2-9b-it",  # Alternative — good for structured tasks
     "mixtral-8x7b-32768",  # Long-context alternative
 ]
 
@@ -45,12 +47,17 @@ class GroqEngine(InferenceEngine):
 
     def __init__(self) -> None:
         self._client: Any = None
+        self._async_client: Any = None
         self._api_key = os.environ.get("GROQ_API_KEY", "")
         if self._api_key:
             try:
                 import openai
 
                 self._client = openai.OpenAI(
+                    api_key=self._api_key,
+                    base_url="https://api.groq.com/openai/v1",
+                )
+                self._async_client = openai.AsyncOpenAI(
                     api_key=self._api_key,
                     base_url="https://api.groq.com/openai/v1",
                 )
@@ -186,9 +193,163 @@ class GroqEngine(InferenceEngine):
             logger.warning("Groq generate failed for model %r: %s", model, exc)
             return None
 
+    # -- Streaming methods -----------------------------------------------------
+
+    async def stream(
+        self,
+        messages: Sequence[Message],
+        *,
+        model: str = "",
+        temperature: float = 0.7,
+        max_tokens: int = 1024,
+        **kwargs: Any,
+    ) -> AsyncIterator[str]:
+        """Yield content tokens as they are generated via Groq streaming API."""
+        if self._async_client is None:
+            raise EngineConnectionError(
+                "Groq async client not available — set GROQ_API_KEY "
+                "and install openai>=1.30"
+            )
+
+        target_model = model or _DEFAULT_MODEL
+
+        # Strip unsupported kwargs
+        kwargs.pop("response_format", None)
+
+        create_kwargs: Dict[str, Any] = {
+            "model": target_model,
+            "messages": messages_to_dicts(messages),
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+            "stream": True,
+        }
+
+        tools = kwargs.pop("tools", None)
+        if tools:
+            create_kwargs["tools"] = tools
+
+        try:
+            response = await self._async_client.chat.completions.create(
+                **create_kwargs
+            )
+            async for chunk in response:
+                if not chunk.choices:
+                    continue
+                delta = chunk.choices[0].delta
+                if delta and delta.content:
+                    yield delta.content
+        except Exception as exc:
+            logger.warning(
+                "Groq stream failed for model %r: %s", target_model, exc
+            )
+            raise EngineConnectionError(
+                f"Groq streaming failed for {target_model}: {exc}"
+            ) from exc
+
+    async def stream_full(
+        self,
+        messages: Sequence[Message],
+        *,
+        model: str = "",
+        temperature: float = 0.7,
+        max_tokens: int = 1024,
+        **kwargs: Any,
+    ) -> AsyncIterator[StreamChunk]:
+        """Yield StreamChunks with content, tool_calls, and finish_reason."""
+        if self._async_client is None:
+            raise EngineConnectionError(
+                "Groq async client not available — set GROQ_API_KEY "
+                "and install openai>=1.30"
+            )
+
+        target_model = model or _DEFAULT_MODEL
+
+        # Strip unsupported kwargs
+        kwargs.pop("response_format", None)
+
+        create_kwargs: Dict[str, Any] = {
+            "model": target_model,
+            "messages": messages_to_dicts(messages),
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+            "stream": True,
+            "stream_options": {"include_usage": True},
+        }
+
+        tools = kwargs.pop("tools", None)
+        if tools:
+            create_kwargs["tools"] = tools
+
+        try:
+            response = await self._async_client.chat.completions.create(
+                **create_kwargs
+            )
+            async for chunk in response:
+                if not chunk.choices:
+                    # Final chunk may carry only usage
+                    if chunk.usage:
+                        yield StreamChunk(
+                            usage={
+                                "prompt_tokens": chunk.usage.prompt_tokens,
+                                "completion_tokens": chunk.usage.completion_tokens,
+                                "total_tokens": chunk.usage.total_tokens,
+                            }
+                        )
+                    continue
+
+                choice = chunk.choices[0]
+                delta = choice.delta
+                content = delta.content if delta else None
+                finish = choice.finish_reason
+
+                # Extract tool_calls from delta
+                tc_list = None
+                if delta and hasattr(delta, "tool_calls") and delta.tool_calls:
+                    tc_list = [
+                        {
+                            "index": tc.index,
+                            "id": getattr(tc, "id", None),
+                            "function": {
+                                "name": getattr(tc.function, "name", None)
+                                if tc.function
+                                else None,
+                                "arguments": getattr(
+                                    tc.function, "arguments", ""
+                                )
+                                if tc.function
+                                else "",
+                            },
+                        }
+                        for tc in delta.tool_calls
+                    ]
+
+                usage_data = None
+                if chunk.usage:
+                    usage_data = {
+                        "prompt_tokens": chunk.usage.prompt_tokens,
+                        "completion_tokens": chunk.usage.completion_tokens,
+                        "total_tokens": chunk.usage.total_tokens,
+                    }
+
+                if content or tc_list or finish or usage_data:
+                    yield StreamChunk(
+                        content=content,
+                        tool_calls=tc_list,
+                        finish_reason=finish,
+                        usage=usage_data,
+                    )
+        except Exception as exc:
+            logger.warning(
+                "Groq stream_full failed for model %r: %s", target_model, exc
+            )
+            raise EngineConnectionError(
+                f"Groq streaming failed for {target_model}: {exc}"
+            ) from exc
+
     def close(self) -> None:
         """Release resources."""
         self._client = None
+        self._async_client = None
 
 
 __all__ = ["GroqEngine", "GROQ_MODELS"]

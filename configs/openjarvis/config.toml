@@ -1,17 +1,18 @@
-# OpenJarvis configuration — GLM-4.7-Flash eval on 8x A100-80GB
+# OpenJarvis configuration — JARVIS personal assistant for Pau
+# Engine: Groq Cloud API | OS: Windows | Timezone: Europe/Madrid
 
 # ═══════════════════════════════════════════════════════════════
 # PILLAR 1: Intelligence — The Model
 # ═══════════════════════════════════════════════════════════════
 [intelligence]
-default_model = "zai-org/GLM-4.7-Flash"   # HuggingFace model ID
-fallback_model = "glm-4.7-flash"          # Catalog alias fallback
-preferred_engine = "vllm"                 # MoE model, vLLM is best for A100s
-provider = "local"                        # Running locally on this machine
-quantization = "none"                     # Full precision, we have 640GB VRAM
-# Generation defaults for eval
-temperature = 0.0                         # Deterministic for reproducibility
-max_tokens = 2048                         # Standard eval output length
+default_model = "llama-3.3-70b-versatile"    # Groq primary — best quality/speed
+fallback_model = "llama-3.1-8b-instant"      # Groq fallback — fast for simple tasks
+preferred_engine = "groq"                     # Cloud inference via Groq API
+provider = "cloud"                           # No local GPU required
+quantization = "none"                        # N/A for cloud models
+# Generation defaults — conversational, not deterministic
+temperature = 0.7
+max_tokens = 1024
 top_p = 0.9
 top_k = 40
 repetition_penalty = 1.0
@@ -20,11 +21,12 @@ repetition_penalty = 1.0
 # PILLAR 2: Agent — The Agentic Harness
 # ═══════════════════════════════════════════════════════════════
 [agent]
-default_agent = "native_openhands"        # CodeAct-style agent
-max_turns = 10                            # Up to 10 tool-calling turns
+default_agent = "native_react"               # ReAct agent for interactive use
+max_turns = 10
 tools = "code_interpreter,web_search,file_read,calculator,think"
-objective = "Answer questions accurately using available tools"
-context_from_memory = false               # No memory injection during eval
+objective = "Asistente personal inteligente para Pau"
+context_from_memory = true                   # Inject relevant memory into prompts
+system_prompt_path = "configs/openjarvis/prompts/jarvis_system.md"
 
 # ═══════════════════════════════════════════════════════════════
 # PILLAR 3: Tools — MCP Interface
@@ -32,6 +34,9 @@ context_from_memory = false               # No memory injection during eval
 [tools.storage]
 default_backend = "sqlite"
 db_path = "~/.openjarvis/memory.db"
+context_top_k = 5
+context_min_score = 0.3
+context_max_tokens = 2000
 
 [tools.mcp]
 enabled = true
@@ -40,47 +45,42 @@ enabled = true
 # PILLAR 4: Engine — The Inference Runtime
 # ═══════════════════════════════════════════════════════════════
 [engine]
-default = "vllm"
+default = "groq"
 
-[engine.vllm]
-host = "http://localhost:8001"            # vLLM serving port
+# Groq Cloud — uses GROQ_API_KEY env var
+# api_key_env = "GROQ_API_KEY"
+# base_url = "https://api.groq.com/openai/v1"
 
+# Ollama — kept for future local model use
 [engine.ollama]
 host = "http://localhost:11434"
 
-[engine.sglang]
-host = "http://localhost:30000"
+# vLLM — commented out, not applicable on Windows personal setup
+# [engine.vllm]
+# host = "http://localhost:8001"
 
+# SGLang — commented out
+# [engine.sglang]
+# host = "http://localhost:30000"
+
+# llama.cpp — kept for potential local GGUF inference
 [engine.llamacpp]
 host = "http://localhost:8080"
-
-[engine.exo]
-host = "http://localhost:52415"
-
-[engine.nexa]
-host = "http://localhost:18181"
-# device = "npu"  # optional: cpu, gpu, npu
-
-[engine.uzu]
-host = "http://localhost:8080"
-
-[engine.apple_fm]
-host = "http://localhost:8079"
 
 # ═══════════════════════════════════════════════════════════════
 # PILLAR 5: Learning — Improvement Methodologies
 # ═══════════════════════════════════════════════════════════════
 [learning]
-enabled = false                           # No learning during eval
+enabled = true                               # Learn from interactions
 
 [learning.routing]
-policy = "heuristic"
+policy = "heuristic"                         # Smart routing between models
 
 [learning.intelligence]
-policy = "none"
+policy = "none"                              # No model fine-tuning (cloud)
 
 [learning.agent]
-policy = "none"
+policy = "none"                              # No agent optimization yet
 
 [learning.metrics]
 accuracy_weight = 0.6
@@ -94,21 +94,50 @@ efficiency_weight = 0.1
 [telemetry]
 enabled = true
 db_path = "~/.openjarvis/telemetry.db"
-gpu_metrics = true
+gpu_metrics = false                          # No local GPU on Windows
 gpu_poll_interval_ms = 50
-energy_vendor = ""                       # Auto-detect; or force "nvidia"/"amd"/"apple"/"cpu_rapl"
-warmup_samples = 0                       # Warmup iterations before steady-state measurement
-steady_state_window = 5                  # Sliding window size for CV stability check
-steady_state_threshold = 0.05            # Coefficient of variation threshold for steady state
+energy_vendor = ""
 
 [traces]
-enabled = true                            # Record traces for analysis
+enabled = true
 db_path = "~/.openjarvis/traces.db"
 
 [server]
-host = "0.0.0.0"
+host = "127.0.0.1"
 port = 8000
-agent = "native_openhands"
+agent = "orchestrator"
 
 [security]
-enabled = false                           # Disable for eval (no PII scanning overhead)
+enabled = true                               # Active for personal use
+profile = "personal"                         # Personal security preset
+
+# ═══════════════════════════════════════════════════════════════
+# Channels — Telegram as primary communication
+# ═══════════════════════════════════════════════════════════════
+[channel]
+enabled = true
+default_channel = "telegram"
+default_agent = "native_react"
+
+# ═══════════════════════════════════════════════════════════════
+# Digest — Morning briefing for Pau
+# ═══════════════════════════════════════════════════════════════
+[digest]
+enabled = true
+schedule = "0 8 * * *"
+timezone = "Europe/Madrid"
+persona = "jarvis"
+honorific = "Pau"
+voice_id = "es-ES-AlvaroNeural"
+voice_speed = 1.1
+tts_backend = "edge-tts"
+sections = ["email", "calendar", "news", "github"]
+
+[digest.messages]
+sources = ["gmail"]
+
+[digest.calendar]
+sources = ["gcalendar"]
+
+[digest.world]
+sources = ["https://news.ycombinator.com/rss", "https://feeds.bbci.co.uk/mundo/rss.xml"]
