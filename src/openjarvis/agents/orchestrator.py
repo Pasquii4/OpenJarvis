@@ -22,6 +22,7 @@ from openjarvis.core.registry import AgentRegistry
 from openjarvis.core.types import Message, Role, ToolCall, ToolResult
 from openjarvis.engine._stubs import InferenceEngine
 from openjarvis.tools._stubs import BaseTool
+from openjarvis.agents.loop_guard import LoopGuard, LoopGuardConfig
 
 
 @AgentRegistry.register("orchestrator")
@@ -60,7 +61,10 @@ class OrchestratorAgent(ToolUsingAgent):
         parallel_tools: bool = True,
         interactive: bool = False,
         confirm_callback=None,
+        loop_guard_config: Optional[dict] = None,
     ) -> None:
+        if loop_guard_config is None:
+            loop_guard_config = {"enabled": True, "max_repeated_calls": 3, "max_turns_without_progress": 5}
         super().__init__(
             engine,
             model,
@@ -71,6 +75,7 @@ class OrchestratorAgent(ToolUsingAgent):
             max_tokens=max_tokens,
             interactive=interactive,
             confirm_callback=confirm_callback,
+            loop_guard_config=loop_guard_config,
         )
         self._mode = mode
         self._system_prompt = system_prompt
@@ -108,6 +113,27 @@ class OrchestratorAgent(ToolUsingAgent):
 
             sys_prompt = build_system_prompt(tools=self._tools)
 
+            # Prepend identity prompt from config (e.g. JARVIS persona)
+            try:
+                from openjarvis.core.config import load_config
+
+                cfg = load_config()
+                identity = cfg.agent.default_system_prompt
+                if identity:
+                    sys_prompt = f"{identity}\n\n{sys_prompt}"
+            except Exception:
+                pass
+
+        # Memory context injection
+        try:
+            from openjarvis.memory.jarvis_memory import search_memory, format_memory_context
+            _mem_results = search_memory(input, top_k=3)
+            _mem_context = format_memory_context(_mem_results)
+            if _mem_context:
+                input = f"{_mem_context}\n\n{input}"
+        except Exception:
+            pass
+
         messages = self._build_messages(input, context, system_prompt=sys_prompt)
 
         all_tool_results: list[ToolResult] = []
@@ -127,6 +153,17 @@ class OrchestratorAgent(ToolUsingAgent):
             # FINAL_ANSWER -> done
             if parsed["final_answer"]:
                 self._emit_turn_end(turns=turns)
+                try:
+                    from openjarvis.memory.jarvis_memory import index_conversation
+                    _raw_input = input.split("[FIN MEMORIA]\n\n", 1)[-1] if "[FIN MEMORIA]\n\n" in input else input
+                    index_conversation(
+                        user_input=_raw_input,
+                        assistant_response=parsed["final_answer"],
+                        agent=self.agent_id,
+                        channel=getattr(context, "channel", "cli") if context else "cli",
+                    )
+                except Exception:
+                    pass
                 return AgentResult(
                     content=parsed["final_answer"],
                     tool_results=all_tool_results,
@@ -151,6 +188,17 @@ class OrchestratorAgent(ToolUsingAgent):
 
             # Neither -> treat content as final answer
             self._emit_turn_end(turns=turns)
+            try:
+                from openjarvis.memory.jarvis_memory import index_conversation
+                _raw_input = input.split("[FIN MEMORIA]\n\n", 1)[-1] if "[FIN MEMORIA]\n\n" in input else input
+                index_conversation(
+                    user_input=_raw_input,
+                    assistant_response=content,
+                    agent=self.agent_id,
+                    channel=getattr(context, "channel", "cli") if context else "cli",
+                )
+            except Exception:
+                pass
             return AgentResult(
                 content=content,
                 tool_results=all_tool_results,
@@ -213,6 +261,16 @@ class OrchestratorAgent(ToolUsingAgent):
     ) -> AgentResult:
         self._emit_turn_start(input)
 
+        # Memory context injection
+        try:
+            from openjarvis.memory.jarvis_memory import search_memory, format_memory_context
+            _mem_results = search_memory(input, top_k=3)
+            _mem_context = format_memory_context(_mem_results)
+            if _mem_context:
+                input = f"{_mem_context}\n\n{input}"
+        except Exception:
+            pass
+
         # Build initial messages
         messages = self._build_messages(input, context)
 
@@ -250,6 +308,17 @@ class OrchestratorAgent(ToolUsingAgent):
                 content = self._check_continuation(result, messages)
                 content = self._strip_think_tags(content)
                 self._emit_turn_end(turns=turns, content_length=len(content))
+                try:
+                    from openjarvis.memory.jarvis_memory import index_conversation
+                    _raw_input = input.split("[FIN MEMORIA]\n\n", 1)[-1] if "[FIN MEMORIA]\n\n" in input else input
+                    index_conversation(
+                        user_input=_raw_input,
+                        assistant_response=content,
+                        agent=self.agent_id,
+                        channel=getattr(context, "channel", "cli") if context else "cli",
+                    )
+                except Exception:
+                    pass
                 return AgentResult(
                     content=content,
                     tool_results=all_tool_results,
@@ -284,17 +353,6 @@ class OrchestratorAgent(ToolUsingAgent):
             if self._parallel_tools and len(tool_calls) > 1:
                 # Parallel execution
                 def _exec_tool(tc: ToolCall) -> tuple:
-                    if self._loop_guard:
-                        verdict = self._loop_guard.check_call(
-                            tc.name,
-                            tc.arguments,
-                        )
-                        if verdict.blocked:
-                            return tc, ToolResult(
-                                tool_name=tc.name,
-                                content=f"Loop guard: {verdict.reason}",
-                                success=False,
-                            )
                     return tc, self._executor.execute(tc)
 
                 with concurrent.futures.ThreadPoolExecutor(
@@ -321,29 +379,6 @@ class OrchestratorAgent(ToolUsingAgent):
             else:
                 # Sequential execution
                 for tc in tool_calls:
-                    # Loop guard check before execution
-                    if self._loop_guard:
-                        verdict = self._loop_guard.check_call(
-                            tc.name,
-                            tc.arguments,
-                        )
-                        if verdict.blocked:
-                            tool_result = ToolResult(
-                                tool_name=tc.name,
-                                content=f"Loop guard: {verdict.reason}",
-                                success=False,
-                            )
-                            all_tool_results.append(tool_result)
-                            messages.append(
-                                Message(
-                                    role=Role.TOOL,
-                                    content=tool_result.content,
-                                    tool_call_id=tc.id,
-                                    name=tc.name,
-                                )
-                            )
-                            continue
-
                     tool_result = self._executor.execute(tc)
                     all_tool_results.append(tool_result)
 
@@ -355,6 +390,17 @@ class OrchestratorAgent(ToolUsingAgent):
                             tool_call_id=tc.id,
                             name=tc.name,
                         )
+                    )
+            
+            if self._loop_guard is not None:
+                guard_result = self._loop_guard.check(messages, all_tool_results)
+                if guard_result.triggered:
+                    self._emit_turn_end(turns=turns, loop_guard_triggered=True)
+                    return AgentResult(
+                        content="He detectado un bucle en mi razonamiento. ¿Puedes reformular la pregunta, Pau?",
+                        tool_results=all_tool_results,
+                        turns=turns,
+                        metadata={"loop_guard_triggered": True, "reason": guard_result.reason},
                     )
 
         # Max turns exceeded

@@ -99,6 +99,7 @@ sandbox-wasm = ["wasmtime>=25"]
 sandbox-docker = ["docker>=7.0"]
 dashboard = ["textual>=0.80"]
 speech = ["faster-whisper>=1.0"]
+speech-edge = ["edge-tts>=6.1.9"]
 speech-deepgram = ["deepgram-sdk>=3.0"]
 eval-wandb = ["wandb>=0.17"]
 eval-sheets = ["gspread>=6.0", "google-auth>=2.0"]
@@ -112,6 +113,7 @@ docs = [
 
 [project.scripts]
 jarvis = "openjarvis.cli:main"
+j = "openjarvis.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/openjarvis"]

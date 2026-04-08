@@ -1,0 +1,12 @@
+# Capacidades deseadas para JARVIS — el Architect las usa como norte
+goals:
+  - control_home_assistant        # encender/apagar luces, thermostat
+  - send_whatsapp                 # mensajes via WhatsApp API
+  - read_pdf_documents            # indexar y responder sobre PDFs del usuario
+  - control_spotify               # reproducir, pausar, siguiente canción
+  - web_browsing_autonomo         # navegar y extraer info de webs sin tool externo
+  - github_pr_automation          # crear PRs automáticamente desde tareas
+  - calendar_write                # crear/modificar eventos en Google Calendar
+  - email_send                    # enviar emails desde JARVIS
+  - notion_integration            # leer y escribir en Notion
+  - voice_cloning                 # TTS con voz personalizada de Pau

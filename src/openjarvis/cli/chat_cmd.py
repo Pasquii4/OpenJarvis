@@ -12,9 +12,54 @@ from rich.markdown import Markdown
 from openjarvis.cli._tool_names import resolve_tool_names
 from openjarvis.core.config import load_config
 from openjarvis.core.types import Message, Role
+import json
+import time
+import threading
+from pathlib import Path
+from openjarvis.core.events import EventType
+
+class MonitorOperative(threading.Thread):
+    def __init__(self, bus):
+        super().__init__(daemon=True)
+        self.bus = bus
+        self.queue = []
+        self.cond = threading.Condition()
+        # Usamos EventType.AGENT_TURN_END si existe, o su string. Asumimos EventType.AGENT_TURN_END.
+        try:
+            self.bus.subscribe(EventType.AGENT_TURN_END, self._on_turn)
+        except Exception:
+            self.bus.subscribe("AGENT_TURN_END", self._on_turn)
+            
+    def _on_turn(self, event):
+        with self.cond:
+            self.queue.append(event)
+            self.cond.notify()
+            
+    def run(self):
+        monitor_path = Path.home() / ".jarvis" / "monitor.jsonl"
+        monitor_path.parent.mkdir(parents=True, exist_ok=True)
+        while True:
+            with self.cond:
+                while not self.queue:
+                    self.cond.wait()
+                event = self.queue.pop(0)
+            
+            data = getattr(event, "data", {}) if hasattr(event, "data") else (event if isinstance(event, dict) else {})
+            metric = {
+                "timestamp": time.time(),
+                "agent_id": data.get("agent_id", "orchestrator"),
+                "turns": data.get("turns", 1),
+                "tokens_used": data.get("tokens_used", 0) or data.get("total_tokens", 0) or 0,
+                "latency_ms": data.get("latency_ms", 0)
+            }
+            try:
+                with open(monitor_path, "a", encoding="utf-8") as f:
+                    f.write(json.dumps(metric) + "\n")
+            except Exception:
+                pass
 
 
-def _read_input(prompt: str = "You> ") -> Optional[str]:
+def _read_input(prompt: str = "Pau> ") -> Optional[str]:
     """Read user input with graceful EOF handling."""
     try:
         return input(prompt)
@@ -47,6 +92,10 @@ def chat(
     console = Console(stderr=True)
 
     config = load_config()
+    
+    # Start background MonitorOperative as an asyncio task in a thread
+    monitor_thread = threading.Thread(target=_start_monitor_loop, daemon=True)
+    monitor_thread.start()
 
     # Resolve engine
     from openjarvis.engine import get_engine
@@ -84,7 +133,11 @@ def chat(
 
             if AgentRegistry.contains(agent_key):
                 agent_cls = AgentRegistry.get(agent_key)
-                kwargs: dict = {"bus": EventBus()}
+                # EventBus creation
+                global_bus = EventBus()
+                MonitorOperative(global_bus).start()
+                
+                kwargs: dict = {"bus": global_bus}
 
                 if getattr(agent_cls, "accepts_tools", False):
                     tool_names_list = resolve_tool_names(
@@ -127,10 +180,18 @@ def chat(
 
     # Print banner
     console.print(
-        f"[green bold]OpenJarvis Chat[/green bold]\n"
+        "[cyan bold]"
+        "     ██╗ █████╗ ██████╗ ██╗   ██╗██╗███████╗\n"
+        "     ██║██╔══██╗██╔══██╗██║   ██║██║██╔════╝\n"
+        "     ██║███████║██████╔╝██║   ██║██║███████╗\n"
+        "██   ██║██╔══██║██╔══██╗╚██╗ ██╔╝██║╚════██║\n"
+        "╚█████╔╝██║  ██║██║  ██║ ╚████╔╝ ██║███████║\n"
+        " ╚════╝ ╚═╝  ╚═╝╚═╝  ╚═╝  ╚═══╝  ╚═╝╚══════╝\n"
+        "[/cyan bold]\n"
         f"  Engine: [cyan]{engine_name}[/cyan]  Model: [cyan]{model}[/cyan]"
         f"  Agent: [cyan]{agent_key or 'direct'}[/cyan]\n"
-        f"  Type /help for commands, /quit to exit.\n"
+        f"  [dim]Hola, Pau. ¿En qué puedo ayudarte hoy?[/dim]\n"
+        f"  Escribe /help para comandos, /quit para salir.\n"
     )
 
     # Conversation state

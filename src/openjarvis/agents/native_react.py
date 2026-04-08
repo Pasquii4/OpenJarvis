@@ -52,7 +52,10 @@ class NativeReActAgent(ToolUsingAgent):
         max_tokens: Optional[int] = None,
         interactive: bool = False,
         confirm_callback=None,
+        loop_guard_config: Optional[dict] = None,
     ) -> None:
+        if loop_guard_config is None:
+            loop_guard_config = {"enabled": True, "max_repeated_calls": 3, "max_turns_without_progress": 5}
         super().__init__(
             engine,
             model,
@@ -63,6 +66,7 @@ class NativeReActAgent(ToolUsingAgent):
             max_tokens=max_tokens,
             interactive=interactive,
             confirm_callback=confirm_callback,
+            loop_guard_config=loop_guard_config,
         )
 
     def _parse_response(self, text: str) -> dict:
@@ -111,7 +115,30 @@ class NativeReActAgent(ToolUsingAgent):
 
         # Build system prompt with rich tool descriptions
         tool_desc = build_tool_descriptions(self._tools)
-        system_prompt = REACT_SYSTEM_PROMPT.format(tool_descriptions=tool_desc)
+        react_prompt = REACT_SYSTEM_PROMPT.format(tool_descriptions=tool_desc)
+
+        # Prepend identity prompt from config (e.g. JARVIS persona)
+        try:
+            from openjarvis.core.config import load_config
+
+            cfg = load_config()
+            identity = cfg.agent.default_system_prompt
+            if identity:
+                system_prompt = f"{identity}\n\n{react_prompt}"
+            else:
+                system_prompt = react_prompt
+        except Exception:
+            system_prompt = react_prompt
+
+        # Memory context injection
+        try:
+            from openjarvis.memory.jarvis_memory import search_memory, format_memory_context
+            _mem_results = search_memory(input, top_k=3)
+            _mem_context = format_memory_context(_mem_results)
+            if _mem_context:
+                input = f"{_mem_context}\n\n{input}"
+        except Exception:
+            pass
 
         messages = self._build_messages(input, context, system_prompt=system_prompt)
 
@@ -141,6 +168,17 @@ class NativeReActAgent(ToolUsingAgent):
             if parsed["final_answer"]:
                 self._emit_turn_end(turns=turns)
                 msg_dicts = [_message_to_dict(m) for m in messages]
+                try:
+                    from openjarvis.memory.jarvis_memory import index_conversation
+                    _raw_input = input.split("[FIN MEMORIA]\n\n", 1)[-1] if "[FIN MEMORIA]\n\n" in input else input
+                    index_conversation(
+                        user_input=_raw_input,
+                        assistant_response=parsed["final_answer"],
+                        agent=self.agent_id,
+                        channel=getattr(context, "channel", "cli") if context else "cli",
+                    )
+                except Exception:
+                    pass
                 return AgentResult(
                     content=parsed["final_answer"],
                     tool_results=all_tool_results,
@@ -152,6 +190,17 @@ class NativeReActAgent(ToolUsingAgent):
             if not parsed["action"]:
                 self._emit_turn_end(turns=turns)
                 msg_dicts = [_message_to_dict(m) for m in messages]
+                try:
+                    from openjarvis.memory.jarvis_memory import index_conversation
+                    _raw_input = input.split("[FIN MEMORIA]\n\n", 1)[-1] if "[FIN MEMORIA]\n\n" in input else input
+                    index_conversation(
+                        user_input=_raw_input,
+                        assistant_response=content,
+                        agent=self.agent_id,
+                        channel=getattr(context, "channel", "cli") if context else "cli",
+                    )
+                except Exception:
+                    pass
                 return AgentResult(
                     content=content,
                     tool_results=all_tool_results,
@@ -190,6 +239,17 @@ class NativeReActAgent(ToolUsingAgent):
 
             observation = f"Observation: {tool_result.content}"
             messages.append(Message(role=Role.USER, content=observation))
+            
+            if self._loop_guard is not None:
+                guard_result = self._loop_guard.check(messages, all_tool_results)
+                if guard_result.triggered:
+                    self._emit_turn_end(turns=turns, loop_guard_triggered=True)
+                    return AgentResult(
+                        content="He detectado un bucle en mi razonamiento. ¿Puedes reformular la pregunta, Pau?",
+                        tool_results=all_tool_results,
+                        turns=turns,
+                        metadata={"loop_guard_triggered": True, "reason": guard_result.reason},
+                    )
 
         # Max turns exceeded
         msg_dicts = [_message_to_dict(m) for m in messages]

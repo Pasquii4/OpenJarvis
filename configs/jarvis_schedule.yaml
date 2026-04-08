@@ -1,0 +1,19 @@
+timezone: Europe/Madrid
+jobs:
+  - id: morning_digest
+    cron: "0 8 * * *"
+    agent: morning_digest
+    channel: telegram
+    input: "Buenos días Pau, genera el briefing matutino completo."
+
+  - id: github_weekly
+    cron: "0 9 * * 1"
+    agent: deep_research
+    channel: telegram
+    input: "Resume las novedades de la semana en el repo Pasquii4/JARVIS: nuevos commits, issues abiertos y PRs."
+
+  - id: weekly_review
+    cron: "0 18 * * 5"
+    agent: orchestrator
+    channel: telegram
+    input: "Resumen ejecutivo de todo lo que hemos hecho esta semana. Usa la memoria para recuperar las conversaciones de los últimos 7 días."

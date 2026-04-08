@@ -605,6 +605,200 @@ class MonitorOperativeAgent(ToolUsingAgent):
             self._memory_backend.store(state_key, summary)
         except Exception:
             logger.debug(
+        The extraction strategy depends on ``_memory_extraction``:
+
+        - ``causality_graph``: Extract causal relationships via
+          :meth:`_extract_causality` and store as KG triples.
+        - ``scratchpad``: Append raw content to a scratchpad key in
+          memory.
+        - ``structured_json``: Attempt to parse JSON from the content
+          and store structured data.
+        - ``none``: Do nothing.
+        """
+        if self._memory_extraction == "none":
+            return
+        if not self._memory_backend:
+            return
+
+        if self._memory_extraction == "causality_graph":
+            self._extract_causality(tool_name, content)
+        elif self._memory_extraction == "scratchpad":
+            self._store_scratchpad(tool_name, content)
+        elif self._memory_extraction == "structured_json":
+            self._store_structured(tool_name, content)
+
+    def _extract_causality(self, tool_name: str, content: str) -> None:
+        """Extract causal relationships from tool output and store them.
+
+        Uses the LLM to identify cause-effect patterns, then stores
+        them via the memory backend.
+        """
+        if not self._memory_backend or not content.strip():
+            return
+        # Only attempt extraction for substantial outputs
+        if len(content) < 50:
+            return
+        try:
+            extract_messages = [
+                Message(
+                    role=Role.SYSTEM,
+                    content=(
+                        "Extract causal relationships from the following tool "
+                        "output. Return a JSON array of objects with 'cause', "
+                        "'effect', and 'confidence' fields. If no causal "
+                        "relationships are found, return an empty array []."
+                    ),
+                ),
+                Message(role=Role.USER, content=content[:4000]),
+            ]
+            result = self._generate(extract_messages)
+            raw = result.get("content", "")
+            # Try to parse JSON from the response
+            raw = raw.strip()
+            if raw.startswith("```"):
+                # Strip code fences
+                lines = raw.split("\n")
+                raw = "\n".join(lines[1:-1] if len(lines) > 2 else lines)
+            relations = json.loads(raw)
+            if isinstance(relations, list):
+                operator_prefix = (
+                    f"monitor_operative:{self._operator_id}"
+                    if self._operator_id
+                    else "monitor_operative"
+                )
+                for rel in relations[:10]:  # Cap at 10 per extraction
+                    if isinstance(rel, dict) and "cause" in rel and "effect" in rel:
+                        key = f"{operator_prefix}:causality:{rel['cause'][:50]}"
+                        value = json.dumps(rel)
+                        try:
+                            self._memory_backend.store(key, value)
+                        except Exception as exc:
+                            logger.debug(
+                                "Failed to store causality relation in memory: %s",
+                                exc,
+                            )
+        except (json.JSONDecodeError, Exception):
+            logger.debug(
+                "Causality extraction failed for tool %s output",
+                tool_name,
+            )
+
+    def _store_scratchpad(self, tool_name: str, content: str) -> None:
+        """Append content to a scratchpad entry in memory."""
+        if not self._memory_backend:
+            return
+        operator_prefix = (
+            f"monitor_operative:{self._operator_id}"
+            if self._operator_id
+            else "monitor_operative"
+        )
+        key = f"{operator_prefix}:scratchpad:{tool_name}"
+        # Truncate long content
+        snippet = content[:1000] if len(content) > 1000 else content
+        try:
+            self._memory_backend.store(key, snippet)
+        except Exception:
+            logger.debug("Could not store scratchpad for tool %s", tool_name)
+
+    def _store_structured(self, tool_name: str, content: str) -> None:
+        """Try to parse JSON from tool output and store structured data."""
+        if not self._memory_backend:
+            return
+        operator_prefix = (
+            f"monitor_operative:{self._operator_id}"
+            if self._operator_id
+            else "monitor_operative"
+        )
+        try:
+            data = json.loads(content)
+            key = f"{operator_prefix}:structured:{tool_name}"
+            self._memory_backend.store(key, json.dumps(data))
+        except (json.JSONDecodeError, TypeError):
+            # Not JSON -- store as plain text truncated
+            key = f"{operator_prefix}:structured:{tool_name}"
+            try:
+                self._memory_backend.store(key, content[:1000])
+            except Exception as exc:
+                logger.debug(
+                    "Failed to store structured data for tool %s: %s",
+                    tool_name,
+                    exc,
+                )
+
+    # ------------------------------------------------------------------
+    # State persistence (OperativeAgent pattern)
+    # ------------------------------------------------------------------
+
+    def _recall_state(self) -> str:
+        """Retrieve previous state from memory backend."""
+        if not self._memory_backend or not self._operator_id:
+            return ""
+        state_key = f"monitor_operative:{self._operator_id}:state"
+        try:
+            result = self._memory_backend.retrieve(state_key)
+            if result:
+                return result if isinstance(result, str) else str(result)
+        except Exception:
+            logger.debug(
+                "No previous state for monitor_operative %s",
+                self._operator_id,
+            )
+        return ""
+
+    def _load_session(self) -> list[Message]:
+        """Load recent session history for this operator."""
+        if not self._session_store or not self._operator_id:
+            return []
+        session_id = f"monitor_operative:{self._operator_id}"
+        try:
+            session = self._session_store.get_or_create(session_id)
+            if hasattr(session, "messages") and session.messages:
+                recent = session.messages[-10:]
+                return [
+                    Message(
+                        role=Role(m.get("role", "user")),
+                        content=m.get("content", ""),
+                    )
+                    for m in recent
+                    if isinstance(m, dict)
+                ]
+        except Exception:
+            logger.debug(
+                "Could not load session for monitor_operative %s",
+                self._operator_id,
+            )
+        return []
+
+    def _save_session(self, input_text: str, response: str) -> None:
+        """Save the tick's prompt and response to the session store."""
+        if not self._session_store or not self._operator_id:
+            return
+        session_id = f"monitor_operative:{self._operator_id}"
+        try:
+            self._session_store.save_message(
+                session_id,
+                {"role": "user", "content": input_text},
+            )
+            self._session_store.save_message(
+                session_id,
+                {"role": "assistant", "content": response},
+            )
+        except Exception:
+            logger.debug(
+                "Could not save session for monitor_operative %s",
+                self._operator_id,
+            )
+
+    def _auto_persist_state(self, content: str) -> None:
+        """Auto-persist a state summary if agent didn't store explicitly."""
+        if not self._memory_backend or not self._operator_id:
+            return
+        state_key = f"monitor_operative:{self._operator_id}:state"
+        try:
+            summary = content[:1000] if content else ""
+            self._memory_backend.store(state_key, summary)
+        except Exception:
+            logger.debug(
                 "Could not auto-persist state for monitor_operative %s",
                 self._operator_id,
             )

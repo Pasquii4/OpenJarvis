@@ -39,63 +39,53 @@ class MorningDigestAgent(ToolUsingAgent):
         # Extract digest-specific kwargs before passing to parent
         self._persona = kwargs.pop("persona", "jarvis")
         self._sections = kwargs.pop(
-            "sections", ["messages", "calendar", "health", "world"]
+            "sections", ["messages", "calendar", "world"]
         )
         self._section_sources = kwargs.pop("section_sources", {})
-        self._timezone = kwargs.pop("timezone", "America/Los_Angeles")
-        self._voice_id = kwargs.pop("voice_id", "")
+        self._timezone = kwargs.pop("timezone", "Europe/Madrid")
+        self._voice_id = kwargs.pop("voice_id", "es-ES-AlvaroNeural")
         self._voice_speed = kwargs.pop("voice_speed", 1.0)
-        self._tts_backend = kwargs.pop("tts_backend", "cartesia")
+        self._tts_backend = kwargs.pop("tts_backend", "edge-tts")
         self._digest_store_path = kwargs.pop("digest_store_path", "")
-        self._honorific = kwargs.pop("honorific", "sir")
+        self._honorific = kwargs.pop("honorific", "Pau")
         super().__init__(*args, **kwargs)
 
     def _build_system_prompt(self) -> str:
         """Assemble the system prompt from persona + briefing structure."""
         persona_text = _load_persona(self._persona)
         now = datetime.now()
-        honorific = getattr(self, "_honorific", "sir")
+        honorific = getattr(self, "_honorific", "Pau")
 
         return (
             f"{persona_text}\n\n"
-            f"Today is {now.strftime('%A, %B %d, %Y')}. "
-            f"The time is {now.strftime('%I:%M %p')} in {self._timezone}.\n"
-            f"The user's preferred honorific is: {honorific}\n\n"
-            "You receive structured data from the user's connected services. "
-            "The data has ALREADY been collected — it appears in the user "
-            "message. You do NOT fetch anything yourself.\n\n"
-            "Produce a 2-4 minute spoken briefing in DECREASING order of "
-            "importance:\n\n"
-            "1. GREETING + PRIORITIES — Open with the honorific and "
-            "immediately state what needs attention: overdue tasks, today's "
-            "deadlines, events requiring preparation. Connect related items "
-            "('Your rebuttals are overdue and you have a dinner at 6, so "
-            "I'd tackle those first').\n\n"
-            "2. SCHEDULE — Today's upcoming events with time context: 'You "
-            "have 3 hours before your next meeting.' Skip past events.\n\n"
-            "3. MESSAGES — Triage across ALL channels (email, texts, Slack):\n"
-            "  - First: messages from real people needing a REPLY or DECISION\n"
-            "  - Second: messages containing deadlines or action items\n"
-            "  - Last: brief acknowledgment of casual threads ('Your group "
-            "chat has been lively but nothing requiring a response')\n"
-            "  - SKIP automated emails, newsletters, and marketing entirely\n"
-            "  - Quote relevant message text when it helps\n\n"
-            "4. HEALTH — Interpret trends, not raw numbers. 'Your sleep has "
-            "improved three nights running and your readiness is strong' — "
-            "not 'HRV 53, HR 56.' If multiple days of data, compare.\n\n"
-            "5. WORLD — Weather forecast, top news (AI/tech, business, "
-            "general). Skip if no data.\n\n"
-            "6. CLOSING — One forward-looking sentence with the honorific.\n\n"
-            "ABSOLUTE RULES (violations are unacceptable):\n"
-            "- ONLY facts from the data. Zero hallucination.\n"
-            "- NEVER mention disconnected or unavailable sources.\n"
-            "- NEVER state raw health numbers. Say 'your sleep was solid' "
-            "NOT 'heart rate 56 bpm' or 'HRV 53' or '6000 steps' or "
-            "'readiness 82'. Interpret, never enumerate.\n"
-            "- NEVER describe actions you are taking.\n"
-            "- Acknowledge every source that returned data, even briefly.\n"
-            "- No markdown, emojis, bullets, or headers.\n"
-            "- STRICT LIMIT: 200 words. Be concise."
+            f"Hoy es {now.strftime('%A, %d de %B de %Y')}. "
+            f"Son las {now.strftime('%H:%M')} en {self._timezone}.\n"
+            f"El usuario se llama: {honorific}\n\n"
+            "Recibes datos estructurados de los servicios conectados del usuario. "
+            "Los datos YA han sido recopilados — aparecen en el mensaje del "
+            "usuario. NO recoges nada tú mismo.\n\n"
+            "Produce un briefing matutino hablado de 2-4 minutos en orden "
+            "DECRECIENTE de importancia:\n\n"
+            "1. SALUDO + PRIORIDADES — Abre con el nombre del usuario e "
+            "indica inmediatamente qué necesita atención: tareas vencidas, "
+            "plazos de hoy, eventos que requieren preparación. Conecta "
+            "elementos relacionados.\n\n"
+            "2. AGENDA — Eventos de hoy con contexto temporal: 'Tienes "
+            "3 horas antes de tu próxima reunión.' Omite eventos pasados.\n\n"
+            "3. MENSAJES — Triaje entre TODOS los canales (email, mensajes):\n"
+            "  - Primero: mensajes de personas reales que necesitan RESPUESTA\n"
+            "  - Segundo: mensajes con plazos o elementos de acción\n"
+            "  - Último: mención breve de hilos casuales\n"
+            "  - OMITE emails automatizados, newsletters y marketing\n\n"
+            "4. TIEMPO — Previsión meteorológica para hoy.\n\n"
+            "5. RESUMEN — Una o dos frases con lo más importante del día.\n\n"
+            "REGLAS ABSOLUTAS (las violaciones son inaceptables):\n"
+            "- SOLO hechos de los datos proporcionados. Cero invención.\n"
+            "- NUNCA menciones fuentes desconectadas o no disponibles.\n"
+            "- NUNCA describas acciones que estás realizando.\n"
+            "- Reconoce cada fuente que devolvió datos, aunque sea brevemente.\n"
+            "- Sin markdown, emojis en el texto hablado, viñetas ni encabezados.\n"
+            "- LÍMITE ESTRICTO: 200 palabras. Sé conciso."
         )
 
     def _resolve_sources(self) -> List[str]:

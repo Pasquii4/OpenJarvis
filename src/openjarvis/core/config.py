@@ -398,7 +398,7 @@ class LemonadeEngineConfig:
 class EngineConfig:
     """Inference engine settings with nested per-engine configs."""
 
-    default: str = "ollama"
+    default: str = "groq"
     ollama: OllamaEngineConfig = field(default_factory=OllamaEngineConfig)
     vllm: VLLMEngineConfig = field(default_factory=VLLMEngineConfig)
     sglang: SGLangEngineConfig = field(default_factory=SGLangEngineConfig)
@@ -526,7 +526,7 @@ class EngineConfig:
 class IntelligenceConfig:
     """The model — identity, paths, quantization, and generation defaults."""
 
-    default_model: str = ""
+    default_model: str = "llama-3.3-70b-versatile"
     fallback_model: str = ""
     model_path: str = ""  # Local weights (HF repo, GGUF file, etc.)
     checkpoint_path: str = ""  # Checkpoint/adapter path
@@ -535,7 +535,7 @@ class IntelligenceConfig:
     provider: str = ""  # local, openai, anthropic, google
     # Generation defaults (overridable per-call)
     temperature: float = 0.7
-    max_tokens: int = 1024
+    max_tokens: int = 2048
     top_p: float = 0.9
     top_k: int = 40
     repetition_penalty: float = 1.0
@@ -794,17 +794,33 @@ class ToolsConfig:
 class AgentConfig:
     """Agent harness settings — orchestration, tools, system prompt."""
 
-    default_agent: str = "simple"
+    default_agent: str = "native_react"
     max_turns: int = 10
     tools: str = ""  # comma-separated tool names
     objective: str = ""  # concise purpose for routing/learning/docs
     system_prompt: str = ""  # inline system prompt (takes precedence if set)
     system_prompt_path: str = ""  # path to system prompt file (.txt, .md)
     context_from_memory: bool = True  # inject relevant memory context into prompts
+    identity_prompt: str = ""  # if set, prepended as first SYSTEM message in all agents
     default_system_prompt: str = (
-        "You are a helpful AI assistant running locally on the user's own "
-        "hardware through OpenJarvis. You are not a cloud service. Respond "
-        "helpfully, concisely, and accurately."
+        "Eres JARVIS, un asistente personal de inteligencia artificial.\n"
+        "Tu usuario se llama Pau. Trátale siempre de manera informal (tuteo).\n\n"
+        "PERSONALIDAD:\n"
+        "- Directo y preciso: nunca des respuestas innecesariamente largas\n"
+        "- Ligeramente irónico cuando la situación lo permite, pero siempre útil\n"
+        "- Proactivo: si ves que falta información relevante, la mencionas sin que te lo pidan\n"
+        "- Inteligente y conciso: prefiere una respuesta de 3 líneas perfectas a 10 mediocres\n\n"
+        "IDIOMA:\n"
+        "- Responde SIEMPRE en español, salvo que Pau escriba explícitamente en otro idioma\n"
+        "- Usa lenguaje natural, no robótico\n\n"
+        "CONTEXTO:\n"
+        "- Tienes acceso a herramientas, memoria y agentes especializados\n"
+        "- Cuando no sepas algo con certeza, dilo directamente en lugar de inventar\n"
+        "- Fecha y hora actuales están disponibles en el contexto del sistema\n\n"
+        "RESTRICCIONES:\n"
+        "- No uses frases de relleno como '¡Por supuesto!', '¡Claro que sí!', '¡Entendido!'\n"
+        "- No repitas la pregunta del usuario antes de responder\n"
+        "- No añadas despedidas ni saludos innecesarios en respuestas cortas"
     )
 
     # Backward-compat property for old field name

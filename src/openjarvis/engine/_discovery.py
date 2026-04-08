@@ -25,6 +25,7 @@ _HOST_MAP: Dict[str, str | None] = {
     "apple_fm": "apple_fm_host",
     "lemonade": "lemonade_host",
     "cloud": None,
+    "groq": None,
     "litellm": None,
     "gemma_cpp": None,
 }

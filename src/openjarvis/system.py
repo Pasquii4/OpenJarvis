@@ -139,9 +139,11 @@ class JarvisSystem:
 
         from openjarvis.core.registry import AgentRegistry
 
-        # Morning digest triggers
+        # Morning digest triggers (English + Spanish)
         if re.search(
-            r"\b(good\s+morning|morning\s+digest|daily\s+briefing|morning\s+briefing)\b",
+            r"\b(good\s+morning|morning\s+digest|daily\s+briefing|morning\s+briefing"
+            r"|buenos\s+d[ií]as|resumen\s+matutino|briefing\s+diario"
+            r"|informe\s+diario|digest\s+matutino)\b",
             query,
             re.IGNORECASE,
         ):

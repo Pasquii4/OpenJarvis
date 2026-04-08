@@ -11,6 +11,7 @@ from openjarvis.channels._stubs import (
 
 # Trigger registration of built-in channels.
 # Each module uses @ChannelRegistry.register() — importing is sufficient.
+# Pruned for JARVIS personal: only channels relevant to Pau are loaded.
 _CHANNEL_MODULES = [
     "telegram",
     "discord_channel",
@@ -20,26 +21,11 @@ _CHANNEL_MODULES = [
     "whatsapp",
     "signal_channel",
     "google_chat",
-    "irc_channel",
     "webchat",
     "teams",
     "matrix_channel",
-    "mattermost",
-    "feishu",
-    "bluebubbles",
     "whatsapp_baileys",
-    "line_channel",
-    "viber_channel",
     "messenger_channel",
-    "reddit_channel",
-    "mastodon_channel",
-    "xmpp_channel",
-    "rocketchat_channel",
-    "zulip_channel",
-    "twitch_channel",
-    "nostr_channel",
-    "twilio_sms",
-    "sendblue",
     "twitter",
     "gmail",
 ]

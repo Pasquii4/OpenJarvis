@@ -9,8 +9,9 @@ if TYPE_CHECKING:
     from openjarvis.core.config import JarvisConfig
     from openjarvis.speech._stubs import SpeechBackend
 
-# Priority order: local first, then cloud
+# Priority order: edge-tts first (free, no API key), then local, then cloud
 DISCOVERY_ORDER = [
+    "edge-tts",
     "faster-whisper",
     "openai",
     "deepgram",

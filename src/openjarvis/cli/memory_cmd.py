@@ -112,7 +112,7 @@ def index(
 
 
 @memory.command()
-@click.argument("query", nargs=-1, required=True)
+@click.argument("query", nargs=-1, required=False)
 @click.option(
     "--top-k",
     "-k",
@@ -120,87 +120,28 @@ def index(
     type=int,
     help="Number of results to return.",
 )
-@click.option(
-    "--backend",
-    "-b",
-    default=None,
-    help="Override the default memory backend.",
-)
-def search(
-    query: tuple[str, ...],
-    top_k: int,
-    backend: str | None,
-) -> None:
+def search(query: tuple[str, ...], top_k: int) -> None:
     """Search the memory store."""
-    console = Console()
-    query_text = " ".join(query)
-
-    mem = _get_backend(backend)
-    try:
-        results = mem.retrieve(query_text, top_k=top_k)
-    finally:
-        if hasattr(mem, "close"):
-            mem.close()
-
-    if not results:
-        console.print("[yellow]No results found.[/yellow]")
+    query_str = " ".join(query)
+    if not query_str:
+        click.echo('Uso: jarvis memory search "<consulta>"')
         return
-
-    table = Table(title=f"Search: {query_text}")
-    table.add_column("#", style="dim", width=3)
-    table.add_column("Score", width=8)
-    table.add_column("Source", style="cyan")
-    table.add_column("Content")
-
+    from openjarvis.memory.jarvis_memory import search_memory
+    results = search_memory(query_str, top_k=top_k)
+    if not results:
+        click.echo("No encontré nada relevante en memoria.")
+        return
     for i, r in enumerate(results, 1):
-        # Truncate content for display
-        preview = r.content[:200]
-        if len(r.content) > 200:
-            preview += "..."
-        table.add_row(
-            str(i),
-            f"{r.score:.4f}",
-            r.source or "-",
-            preview,
-        )
-
-    console.print(table)
+        meta = r.get("metadata", {})
+        ts = meta.get("timestamp", "")[:16] if isinstance(meta, dict) else ""
+        click.echo(f"\n[{i}] {ts}")
+        click.echo(r.get("content", r.get("text", ""))[:500])
 
 
 @memory.command()
-@click.option(
-    "--backend",
-    "-b",
-    default=None,
-    help="Override the default memory backend.",
-)
-def stats(backend: str | None) -> None:
+def stats() -> None:
     """Show memory store statistics."""
-    console = Console()
-
-    mem = _get_backend(backend)
-    try:
-        count = 0
-        if hasattr(mem, "count"):
-            count = mem.count()
-
-        table = Table(title="Memory Statistics")
-        table.add_column("Property", style="cyan")
-        table.add_column("Value")
-        table.add_row("Backend", mem.backend_id)
-        table.add_row("Documents", str(count))
-
-        if hasattr(mem, "_db_path"):
-            db_path = Path(mem._db_path)
-            if db_path.exists():
-                size_kb = db_path.stat().st_size / 1024
-                table.add_row(
-                    "Database size",
-                    f"{size_kb:.1f} KB",
-                )
-            table.add_row("Database path", str(db_path))
-
-        console.print(table)
-    finally:
-        if hasattr(mem, "close"):
-            mem.close()
+    from openjarvis.memory.jarvis_memory import stats_memory
+    count = stats_memory()
+    from pathlib import Path
+    click.echo(f"Memoria JARVIS: {count} conversaciones indexadas en {Path.home() / '.jarvis' / 'memory'}")
