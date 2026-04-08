@@ -54,7 +54,7 @@ echo  ────────────────────────�
 echo.
 echo  [1] Chat interactivo (jarvis chat)
 echo  [2] Solo scheduler en background
-echo  [3] Servidor API (jarvis serve)
+echo  [3] Sistema Completo (Backend + Frontend + Scheduler)
 echo  [4] Morning digest ahora (jarvis digest --fresh)
 echo  [5] Salir
 echo.
@@ -62,6 +62,7 @@ echo.
 cd /d "%~dp0"
 
 set /p choice="  Selecciona una opcion [1-5]: "
+set choice=%choice: =%
 
 IF "%choice%"=="1" (
     echo.
@@ -78,10 +79,18 @@ IF "%choice%"=="1" (
     uv run python -m openjarvis.agents.scheduler --config configs/jarvis_schedule.yaml
 ) ELSE IF "%choice%"=="3" (
     echo.
-    echo  Starting API server on http://127.0.0.1:8000 ...
-    echo  Press Ctrl+C to stop.
+    echo  Iniciando JARVIS completo...
+    echo  - Arrancando Scheduler en background.
+    start /B uv run python -m openjarvis.agents.scheduler --config configs/jarvis_schedule.yaml
+    echo  - Arrancando API Backend en nueva ventana.
+    start "JARVIS Backend (API)" cmd /k "uv run jarvis serve"
+    echo  - Arrancando Interfaz Web en nueva ventana.
+    start "JARVIS Frontend" cmd /k "cd frontend && npm run dev"
     echo.
-    uv run jarvis serve
+    echo  Todo iniciado. Abre http://localhost:5173 en tu navegador.
+    echo.
+    pause
+    exit /b 0
 ) ELSE IF "%choice%"=="4" (
     echo.
     echo  Generating morning digest...

@@ -64,7 +64,7 @@ class OrchestratorAgent(ToolUsingAgent):
         loop_guard_config: Optional[dict] = None,
     ) -> None:
         if loop_guard_config is None:
-            loop_guard_config = {"enabled": True, "max_repeated_calls": 3, "max_turns_without_progress": 5}
+            loop_guard_config = {"enabled": True, "max_identical_calls": 3}
         super().__init__(
             engine,
             model,

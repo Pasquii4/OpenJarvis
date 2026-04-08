@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import sys
 
 import click
@@ -62,6 +63,21 @@ def serve(
         )
         sys.exit(1)
 
+    # Load environment variables from .env if present
+    env_path = os.path.join(os.getcwd(), ".env")
+    if os.path.exists(env_path):
+        try:
+            with open(env_path, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line or line.startswith("#") or "=" not in line:
+                        continue
+                    k, v = line.split("=", 1)
+                    if k.strip() not in os.environ:
+                        os.environ[k.strip()] = v.strip()
+        except Exception as exc:
+            logger.debug("Failed to load .env file manually: %s", exc)
+
     config = load_config()
 
     # Resolve host/port from CLI args or config
@@ -105,8 +121,6 @@ def serve(
 
     # If cloud API keys are set, wrap with MultiEngine so both local
     # and cloud models appear in the model list and can be used.
-    import os
-
     _has_cloud = (
         os.environ.get("OPENAI_API_KEY")
         or os.environ.get("ANTHROPIC_API_KEY")
@@ -153,11 +167,24 @@ def serve(
     except Exception as exc:
         logger.debug("Engine instrumentation failed: %s", exc)
 
-    # Discover models
-    all_engines = discover_engines(config)
-    all_models = discover_models(all_engines)
-    for ek, model_ids in all_models.items():
-        merge_discovered_models(ek, model_ids)
+    # Discover models only if we don't have a functional engine yet or we specifically need the full list.
+    # We always need the engine name and instance (which we have from get_engine).
+    # Populate the registry with models from our current engine at minimum.
+    try:
+        current_engine_models = engine.list_models()
+        merge_discovered_models(engine_name, current_engine_models)
+        all_models = {engine_name: current_engine_models}
+    except Exception as exc:
+        logger.debug("Failed to list models for current engine %r: %s", engine_name, exc)
+        all_models = {}
+
+    # Only do full discovery if we are in a 'multi' mode or explicitly requested, 
+    # but for a standard serve, the current engine is enough.
+    if engine_name == "multi":
+        all_engines = discover_engines(config)
+        all_models = discover_models(all_engines)
+        for ek, model_ids in all_models.items():
+            merge_discovered_models(ek, model_ids)
 
     # Resolve model
     if model_name is None:
@@ -398,9 +425,7 @@ def serve(
             logger.debug("Memory backend init failed: %s", exc)
 
     # --- Channel Gateway: API key, sessions, ChannelBridge ---
-    import os as _os
-
-    api_key = _os.environ.get("OPENJARVIS_API_KEY", "")
+    api_key = os.environ.get("OPENJARVIS_API_KEY", "")
     if not api_key:
         try:
             import tomllib
@@ -432,10 +457,10 @@ def serve(
         logger.info("Credentials loaded — %s", ", ".join(_cred_parts))
 
     webhook_config = {
-        "twilio_auth_token": _os.environ.get("TWILIO_AUTH_TOKEN", ""),
-        "bluebubbles_password": _os.environ.get("BLUEBUBBLES_PASSWORD", ""),
-        "whatsapp_verify_token": _os.environ.get("WHATSAPP_VERIFY_TOKEN", ""),
-        "whatsapp_app_secret": _os.environ.get("WHATSAPP_APP_SECRET", ""),
+        "twilio_auth_token": os.environ.get("TWILIO_AUTH_TOKEN", ""),
+        "bluebubbles_password": os.environ.get("BLUEBUBBLES_PASSWORD", ""),
+        "whatsapp_verify_token": os.environ.get("WHATSAPP_VERIFY_TOKEN", ""),
+        "whatsapp_app_secret": os.environ.get("WHATSAPP_APP_SECRET", ""),
     }
 
     # Wrap existing channel in ChannelBridge orchestrator

@@ -5,9 +5,9 @@
 # PILLAR 1: Intelligence — The Model
 # ═══════════════════════════════════════════════════════════════
 [intelligence]
-default_model = "llama-3.3-70b-versatile"    # Groq primary — best quality/speed
-fallback_model = "llama-3.1-8b-instant"      # Groq fallback — fast for simple tasks
-preferred_engine = "groq"                     # Cloud inference via Groq API
+default_model = "openrouter/deepseek/deepseek-r1" # High-performance reasoning model via OpenRouter
+fallback_model = "openrouter/auto"              # Automatic fallback via OpenRouter
+preferred_engine = "cloud"                      # Use the cloud engine for OpenRouter
 provider = "cloud"                           # No local GPU required
 quantization = "none"                        # N/A for cloud models
 # Generation defaults — conversational, not deterministic
