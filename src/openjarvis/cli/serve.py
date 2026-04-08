@@ -154,12 +154,19 @@ def serve(
         try:
             from openjarvis.telemetry.energy_monitor import create_energy_monitor
 
-            energy_mon = create_energy_monitor()
-            if energy_mon is not None:
-                console.print(
-                    f"  Energy: [cyan]{energy_mon.vendor().value}[/cyan] "
-                    f"({energy_mon.energy_method()})"
+            # Only initialize energy monitoring if enabled in config
+            if config.telemetry.enabled and config.telemetry.gpu_metrics:
+                energy_mon = create_energy_monitor(
+                    poll_interval_ms=config.telemetry.gpu_poll_interval_ms,
+                    prefer_vendor=config.telemetry.energy_vendor,
                 )
+                if energy_mon is not None:
+                    console.print(
+                        f"  Energy: [cyan]{energy_mon.vendor().value}[/cyan] "
+                        f"({energy_mon.energy_method()})"
+                    )
+            else:
+                logger.debug("Energy monitoring disabled or gpu_metrics=false, skipping discovery")
         except Exception as exc:
             logger.debug("Energy monitor creation failed: %s", exc)
 
@@ -178,13 +185,16 @@ def serve(
         logger.debug("Failed to list models for current engine %r: %s", engine_name, exc)
         all_models = {}
 
-    # Only do full discovery if we are in a 'multi' mode or explicitly requested, 
-    # but for a standard serve, the current engine is enough.
-    if engine_name == "multi":
-        all_engines = discover_engines(config)
-        all_models = discover_models(all_engines)
-        for ek, model_ids in all_models.items():
-            merge_discovered_models(ek, model_ids)
+    # Only do full discovery if we are in a 'multi' mode and don't have enough models yet,
+    # or if explicitly requested. For a standard serve, the current engine is enough.
+    if engine_name == "multi" and not all_models.get("multi"):
+        try:
+            all_engines = discover_engines(config)
+            all_models = discover_models(all_engines)
+            for ek, model_ids in all_models.items():
+                merge_discovered_models(ek, model_ids)
+        except Exception as exc:
+            logger.debug("Full engine discovery failed: %s", exc)
 
     # Resolve model
     if model_name is None:
