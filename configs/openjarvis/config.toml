@@ -45,15 +45,19 @@ enabled = true
 # PILLAR 4: Engine — The Inference Runtime
 # ═══════════════════════════════════════════════════════════════
 [engine]
-default = "groq"
+default = "cloud"
+
+[engine.cloud]
+base_url = "https://openrouter.ai/api/v1"
+api_key_env = "OPENROUTER_API_KEY"
 
 # Groq Cloud — uses GROQ_API_KEY env var
 # api_key_env = "GROQ_API_KEY"
 # base_url = "https://api.groq.com/openai/v1"
 
 # Ollama — kept for future local model use
-[engine.ollama]
-host = "http://localhost:11434"
+# [engine.ollama]
+# host = "http://localhost:11434"
 
 # vLLM — commented out, not applicable on Windows personal setup
 # [engine.vllm]
