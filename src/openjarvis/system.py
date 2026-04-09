@@ -241,6 +241,11 @@ class JarvisSystem:
             existing = agent_kwargs.get("tools", [])
             agent_kwargs["tools"] = digest_tools + list(existing)
 
+        # Inject DigestConfig for health_digest agent
+        if agent_name == "health_digest" and hasattr(self.config, "digest"):
+            dc = self.config.digest
+            agent_kwargs.update({"timezone": dc.timezone})
+
         try:
             ag = agent_cls(self.engine, self.model, **agent_kwargs)
         except TypeError:

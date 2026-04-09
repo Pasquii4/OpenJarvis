@@ -175,13 +175,14 @@ class BaseAgent(ABC):
                 {"model": self._model, "engine": engine_id},
             )
 
-        result = self._engine.generate(
-            messages,
-            model=self._model,
-            temperature=self._temperature,
-            max_tokens=self._max_tokens,
-            **extra_kwargs,
-        )
+        merged = {
+            "model": self._model,
+            "temperature": self._temperature,
+            "max_tokens": self._max_tokens,
+        }
+        merged.update(extra_kwargs)
+
+        result = self._engine.generate(messages, **merged)
 
         if self._bus and not getattr(self._engine, "_publishes_events", False):
             usage = result.get("usage", {})

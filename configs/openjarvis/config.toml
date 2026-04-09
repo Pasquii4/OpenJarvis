@@ -72,12 +72,40 @@ host = "http://localhost:8080"
 # ═══════════════════════════════════════════════════════════════
 [learning]
 enabled = true                               # Learn from interactions
+training_enabled = true                      # Enable LoRA self-improvement
+min_improvement = 0.05                       # Min accuracy delta to promote model
+
 
 [learning.routing]
 policy = "heuristic"                         # Smart routing between models
 
+[learning.data]
+privacy_filter = true
+exclude_channels = ["email", "calendar"]
+min_quality_score = 0.6
+export_dir = "~/.openjarvis/training_data"
+
 [learning.intelligence]
-policy = "none"                              # No model fine-tuning (cloud)
+policy = "sft"                               # Switched to SFT for local LoRA pipeline
+
+[learning.intelligence.sft]
+lora_rank = 16
+lora_alpha = 32
+lora_dropout = 0.05
+min_pairs = 50
+max_pairs = 2000
+eval_split = 0.15
+epochs = 3
+learning_rate = 0.0002
+batch_size = 4
+gradient_accumulation_steps = 4
+warmup_steps = 100
+save_steps = 50
+eval_steps = 50
+output_dir = "~/.openjarvis/lora_checkpoints"
+base_model = "openrouter/deepseek/deepseek-r1"
+dry_run = true                               # Default to dry_run for local windows
+
 
 [learning.agent]
 policy = "none"                              # No agent optimization yet
@@ -131,7 +159,8 @@ honorific = "Pau"
 voice_id = "es-ES-AlvaroNeural"
 voice_speed = 1.1
 tts_backend = "edge-tts"
-sections = ["email", "calendar", "news", "github"]
+sections = ["email", "calendar", "news", "github", "health"]
+
 
 [digest.messages]
 sources = ["gmail"]
@@ -141,3 +170,14 @@ sources = ["gcalendar"]
 
 [digest.world]
 sources = ["https://news.ycombinator.com/rss", "https://feeds.bbci.co.uk/mundo/rss.xml"]
+
+# ═══════════════════════════════════════════════════════════════
+# Scheduler — Scheduled background tasks
+# ═══════════════════════════════════════════════════════════════
+[scheduler]
+enabled = true
+
+[scheduler.nightly_train]
+cron = "0 3 * * *"
+job = "openjarvis.learning.nightly_train_job:run"
+enabled = true

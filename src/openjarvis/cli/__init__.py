@@ -38,6 +38,8 @@ from openjarvis.cli.telemetry_cmd import telemetry
 from openjarvis.cli.tool_cmd import tool
 from openjarvis.cli.vault_cmd import vault
 from openjarvis.cli.workflow_cmd import workflow
+from openjarvis.cli.health_cmd import health
+from openjarvis.cli.architect_cmd import architect_group
 
 
 @click.group(help="OpenJarvis — modular AI assistant backend")
@@ -98,6 +100,8 @@ cli.add_command(connect, "connect")
 cli.add_command(digest, "digest")
 cli.add_command(deep_research_setup, "deep-research-setup")
 cli.add_command(deep_research_setup, "research")
+cli.add_command(health, "health")
+cli.add_command(architect_group, "architect")
 
 # Gateway CLI commands (lazy import to avoid pulling starlette)
 try:

@@ -129,6 +129,17 @@ class MorningDigestAgent(ToolUsingAgent):
         collect_result = self._executor.execute(collect_call)
         collected_data = collect_result.content
 
+        # Include JARVIS health report on Mondays if 'health' is requested
+        if "health" in self._sections and datetime.now().weekday() == 0:
+            try:
+                from openjarvis.agents.health_digest import HealthDigestAgent
+                health_agent = HealthDigestAgent(engine=self._engine, model=self._model)
+                health_res = health_agent.run("Genera el informe semanal de salud")
+                collected_data += f"\n\n=== JARVIS HEALTH ===\n{health_res.content}\n"
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).warning("Failed to run health digest: %s", e)
+
         # Step 2: Synthesize narrative via LLM
         system_prompt = self._build_system_prompt()
         messages = [
