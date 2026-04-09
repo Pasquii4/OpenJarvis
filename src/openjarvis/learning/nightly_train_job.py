@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Dict, Any
 
 from openjarvis.core.config import load_config
+from openjarvis.core.events import Event, EventType
 from openjarvis.traces.store import TraceStore
 from openjarvis.learning.trace_to_dataset import extract_training_pairs
 from openjarvis.system import SystemBuilder
@@ -23,10 +24,10 @@ def evaluate_suite(model_mock: str = None) -> float:
         # But for dry_run or simple setup, returning a float placeholder if it passes.
         res = subprocess.run(["pytest", "tests/evals/", "tests/agents/"], capture_output=True, text=True)
         if res.returncode == 0:
-            # Simulated accuracy calculation
-            return 0.95
+            # DRY_RUN placeholder — reemplazar con parsing real de pytest output en producción
+            return 0.0
         else:
-            return 0.40
+            return 0.0
     except Exception as e:
         logger.error(f"Eval suite failed: {e}")
         return 0.0
@@ -88,10 +89,10 @@ def run() -> None:
         summary_msg += f"- Baseline score: {baseline_score:.2f}\n"
 
         if is_dry_run:
-            logger.info("DRY_RUN: Simulating LoRA training.")
+            logger.info("DRY_RUN: Simulando LoRA training.")
             new_model = telemetry.base_model + "-lora-simulated"
-            # Simulate slight improvement
-            new_score = baseline_score + 0.06 
+            baseline_score = 0.0  # En dry_run no se evalúa realmente
+            new_score = config.learning.min_improvement + 0.01  # Simula pasar el umbral justo
             lora_path = "dry_run_path"
         else:
             # We call LearningOrchestrator pipeline
@@ -114,11 +115,18 @@ def run() -> None:
         if improvement >= config.learning.min_improvement:
             promote_model(new_model, config)
             summary_msg += f"✅ Modelo promovido con mejora de +{improvement:.2f}.\nNuevo modelo: {new_model}"
-            # Telemery update
-            system.bus.publish("SYSTEM_INFO", data={"metric": "model_promoted", "improvement": improvement})
+            system.bus.publish(Event(
+                type=EventType.SYSTEM_INFO,
+                source="nightly_train_job",
+                data={"metric": "model_promoted", "improvement": improvement}
+            ))
         else:
             summary_msg += f"❌ Mejora insuficiente (+{improvement:.2f}). Checkpoint descartado."
-            system.bus.publish("SYSTEM_INFO", data={"metric": "model_rejected", "improvement": improvement})
+            system.bus.publish(Event(
+                type=EventType.SYSTEM_INFO,
+                source="nightly_train_job",
+                data={"metric": "model_rejected", "improvement": improvement}
+            ))
 
         send_telegram_summary(system.channel_backend, summary_msg)
 

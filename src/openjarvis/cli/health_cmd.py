@@ -13,8 +13,18 @@ from openjarvis.health.metrics import get_health_metrics
 @click.option("--days", type=int, default=7, help="Number of days to analyze.")
 def health(out_format: str, days: int) -> None:
     config = load_config()
-    
-    # Send telemetry event for opening dashboard (can use get_event_bus but this is CLI context)
+
+    try:
+        from openjarvis.core.events import get_event_bus, Event, EventType
+        bus = get_event_bus()
+        bus.publish(Event(
+            type=EventType.SYSTEM_INFO,
+            source="health_cmd",
+            data={"metric": "health_dashboard_invoked", "days": days, "format": out_format}
+        ))
+    except Exception:
+        pass  # Telemetría no crítica, no interrumpir el comando
+
     console = Console()
     if out_format != "json":
         console.print(f"[dim]Analyzing interactions over the last {days} days...[/dim]")

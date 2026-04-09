@@ -43,8 +43,8 @@ class HealthDigestAgent(ToolUsingAgent):
         if is_sunday:
             try:
                 # Import check for Architect status locally 
-                from openjarvis.cli.architect_cmd import _run_checks
-                checks_result = _run_checks()
+                from openjarvis.cli.architect_cmd import run_architect_checks
+                checks_result = run_architect_checks()
                 architect_status = "Resultados del check arquitectural:\n"
                 for c in checks_result:
                     architect_status += f"- {c['id']}: {c['status']} ({c['detail']})\n"

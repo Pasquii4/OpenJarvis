@@ -69,7 +69,8 @@ def get_health_metrics(telemetry_db_path: str, traces_db_path: str, days: int = 
             # Sessions approx by unique trace per day (simplified sessions equivalent)
             metrics["sessions_per_day"][started] = metrics["sessions_per_day"].get(started, 0) + 1
 
-            meta = json.loads(row["metadata"])
+            raw_meta = row["metadata"] or "{}"
+            meta = json.loads(raw_meta)
             channel = meta.get("channel", "unknown")
             if channel not in channel_stats:
                 channel_stats[channel] = {"success": 0, "total": 0}
@@ -114,7 +115,8 @@ def get_health_metrics(telemetry_db_path: str, traces_db_path: str, days: int = 
         # The step timestamp may not be totally accurate but it correlates with traces
         steps = cursor.execute("SELECT output, metadata, step_type FROM trace_steps WHERE step_type='tool' AND timestamp >= ?", (cutoff_time,)).fetchall()
         for s in steps:
-            smeta = json.loads(s["metadata"])
+            raw_smeta = s["metadata"] or "{}"
+            smeta = json.loads(raw_smeta)
             tool_name = smeta.get("tool_name", "unknown")
             tool_counts[tool_name] = tool_counts.get(tool_name, 0) + 1
         
