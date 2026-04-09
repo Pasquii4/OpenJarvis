@@ -2,6 +2,9 @@
 
 Personalized for JARVIS: user whitelist, Spanish commands, voice
 transcription, and streaming response support.
+
+Also provides JarvisTelegramBot — an aiogram 3.x based companion
+for sending pro-active notifications with inline approval keyboards.
 """
 
 from __future__ import annotations
@@ -508,4 +511,302 @@ class TelegramChannel(BaseChannel):
             )
 
 
-__all__ = ["TelegramChannel"]
+# ---------------------------------------------------------------------------
+# JarvisTelegramBot — aiogram 3.x companion (Raspberry Pi / local-first)
+# ---------------------------------------------------------------------------
+
+
+class JarvisTelegramBot:
+    """Aiogram 3.x based Telegram bot for JARVIS control.
+
+    Designed for Raspberry Pi 5 deployment with Ollama + Qwen2.5.
+    Handles commands, free-text chat, and inline approval flows.
+
+    Parameters
+    ----------
+    token:
+        Telegram Bot API token.  Falls back to ``TELEGRAM_BOT_TOKEN`` env var.
+    jarvis_api_url:
+        Base URL of the JARVIS FastAPI server.
+        Falls back to ``JARVIS_API_URL`` env var (default ``http://localhost:8000``).
+    """
+
+    def __init__(
+        self,
+        token: str = "",
+        *,
+        jarvis_api_url: str = "",
+    ) -> None:
+        self._token: str = token or os.environ.get("TELEGRAM_BOT_TOKEN", "")
+        self._api_url: str = (
+            jarvis_api_url
+            or os.environ.get("JARVIS_API_URL", "http://localhost:8000")
+        ).rstrip("/")
+        self._bot: Any = None
+        self._dp: Any = None
+        self._log = logging.getLogger(__name__ + ".JarvisTelegramBot")
+
+    # -- lifecycle -------------------------------------------------------------
+
+    def _build(self) -> None:
+        """Lazily build the Bot and Dispatcher (imports aiogram on first call)."""
+        if self._bot is not None:
+            return
+        try:
+            from aiogram import Bot, Dispatcher
+            from aiogram.client.default import DefaultBotProperties
+            from aiogram.enums import ParseMode
+
+            self._bot = Bot(
+                token=self._token,
+                default=DefaultBotProperties(parse_mode=ParseMode.MARKDOWN),
+            )
+            self._dp = Dispatcher()
+            self._register_handlers()
+            self._log.info("JarvisTelegramBot construido con aiogram 3.x")
+        except ImportError:
+            self._log.error(
+                "aiogram no está instalado. Instálalo con: uv add aiogram>=3.4.0"
+            )
+            raise
+
+    def _register_handlers(self) -> None:
+        """Register all command and message handlers on the dispatcher."""
+        from aiogram import F
+        from aiogram.filters import Command
+        from aiogram.types import CallbackQuery, Message
+
+        dp = self._dp
+
+        @dp.message(Command("start"))
+        async def cmd_start(msg: Message) -> None:
+            self._log.info("/start from user_id=%s", msg.from_user.id if msg.from_user else "?")
+            await msg.answer(
+                "*¡Hola! Soy JARVIS* 🤖\n\n"
+                "Tu asistente personal de IA. Aquí tienes los comandos disponibles:\n\n"
+                "• /status — Estado del sistema (CPU, RAM, temperatura)\n"
+                "• /agents — Agentes activos en este momento\n"
+                "• /help — Lista completa de comandos\n"
+                "• Puedes escribirme cualquier cosa y te responderé."
+            )
+
+        @dp.message(Command("help"))
+        async def cmd_help(msg: Message) -> None:
+            self._log.info("/help from user_id=%s", msg.from_user.id if msg.from_user else "?")
+            await msg.answer(
+                "*Comandos disponibles*\n\n"
+                "• /start — Bienvenida e introducción\n"
+                "• /status — Estado del sistema en tiempo real\n"
+                "• /agents — Lista de agentes activos\n"
+                "• /help — Este mensaje\n"
+                "• *Texto libre* — Envíame cualquier pregunta o instrucción"
+            )
+
+        @dp.message(Command("status"))
+        async def cmd_status(msg: Message) -> None:
+            self._log.info("/status from user_id=%s", msg.from_user.id if msg.from_user else "?")
+            try:
+                import httpx
+
+                async with httpx.AsyncClient(timeout=60.0) as client:
+                    resp = await client.get(f"{self._api_url}/api/system/status")
+                    resp.raise_for_status()
+                    data = resp.json()
+
+                temp = data.get("temperature", 0.0)
+                temp_str = f"{temp:.1f}°C" if temp > 0 else "N/A (desarrollo)"
+
+                text = (
+                    "*📊 Estado del sistema*\n\n"
+                    f"🖥️ CPU: `{data.get('cpu_percent', 0):.1f}%`\n"
+                    f"🧠 RAM: `{data.get('ram_used_gb', 0):.2f} / {data.get('ram_total_gb', 0):.1f} GB` "
+                    f"({data.get('ram_percent', 0):.0f}%)\n"
+                    f"🌡️ Temperatura: `{temp_str}`\n"
+                    f"⏱️ Uptime: `{data.get('uptime_seconds', 0)}s`\n"
+                    f"💻 Plataforma: `{data.get('platform', 'desconocida')}`"
+                )
+                self._log.info("Estado del sistema enviado a user_id=%s", msg.from_user.id if msg.from_user else "?")
+            except Exception as exc:
+                self._log.warning("Error obteniendo /status: %s", exc)
+                text = f"⚠️ No pude obtener el estado del sistema: `{exc}`"
+            await msg.answer(text)
+
+        @dp.message(Command("agents"))
+        async def cmd_agents(msg: Message) -> None:
+            self._log.info("/agents from user_id=%s", msg.from_user.id if msg.from_user else "?")
+            try:
+                import httpx
+
+                async with httpx.AsyncClient(timeout=60.0) as client:
+                    resp = await client.get(f"{self._api_url}/api/agents")
+                    resp.raise_for_status()
+                    data = resp.json()
+
+                agents = data if isinstance(data, list) else data.get("agents", [])
+                if not agents:
+                    text = "ℹ️ No hay agentes activos en este momento."
+                else:
+                    lines = ["*🤖 Agentes activos*\n"]
+                    for a in agents:
+                        name = a.get("name") or a.get("id") or str(a)
+                        status = a.get("status", "activo")
+                        lines.append(f"• `{name}` — {status}")
+                    text = "\n".join(lines)
+                self._log.info("%d agentes listados para user_id=%s", len(agents), msg.from_user.id if msg.from_user else "?")
+            except Exception as exc:
+                self._log.warning("Error obteniendo /agents: %s", exc)
+                text = f"⚠️ No pude obtener la lista de agentes: `{exc}`"
+            await msg.answer(text)
+
+        @dp.message(F.text)
+        async def handle_free_text(msg: Message) -> None:
+            """Forward free-text messages to /api/chat and return the response."""
+            user_id = msg.from_user.id if msg.from_user else 0
+            text_in = msg.text or ""
+            self._log.info(
+                "Mensaje libre de user_id=%s (len=%d)", user_id, len(text_in)
+            )
+            try:
+                import httpx
+
+                payload = {
+                    "message": text_in,
+                    "user_id": str(user_id),
+                    "channel": "telegram",
+                }
+                async with httpx.AsyncClient(timeout=60.0) as client:
+                    resp = await client.post(f"{self._api_url}/api/chat", json=payload)
+                    resp.raise_for_status()
+                    data = resp.json()
+
+                reply = (
+                    data.get("response")
+                    or data.get("content")
+                    or data.get("message")
+                    or str(data)
+                )
+                self._log.info("Respuesta enviada a user_id=%s", user_id)
+            except Exception as exc:
+                self._log.warning(
+                    "Error procesando mensaje de user_id=%s: %s", user_id, exc
+                )
+                reply = (
+                    f"⚠️ Lo siento, hubo un error procesando tu mensaje.\n"
+                    f"Detalle: `{exc}`\n\n"
+                    "Por favor, inténtalo de nuevo en unos segundos."
+                )
+            await msg.answer(reply)
+
+        @dp.callback_query(F.data.startswith("approve:"))
+        async def handle_approve(callback: CallbackQuery) -> None:
+            """Handle approval of a code improvement proposal."""
+            proposal_id = callback.data.split(":", 1)[1] if ":" in (callback.data or "") else ""
+            user_id = callback.from_user.id if callback.from_user else 0
+            self._log.info("Propuesta APROBADA id=%s por user_id=%s", proposal_id, user_id)
+            try:
+                import httpx
+
+                async with httpx.AsyncClient(timeout=60.0) as client:
+                    await client.post(
+                        f"{self._api_url}/api/proposals/{proposal_id}/approve",
+                        json={"user_id": str(user_id)},
+                    )
+            except Exception as exc:
+                self._log.warning("Error aprobando propuesta %s: %s", proposal_id, exc)
+            if callback.message:
+                await callback.message.edit_text(
+                    f"✅ Propuesta `{proposal_id}` *aprobada*. JARVIS ejecutará los cambios."
+                )
+            await callback.answer("✅ Aprobado")
+
+        @dp.callback_query(F.data.startswith("reject:"))
+        async def handle_reject(callback: CallbackQuery) -> None:
+            """Handle rejection of a code improvement proposal."""
+            proposal_id = callback.data.split(":", 1)[1] if ":" in (callback.data or "") else ""
+            user_id = callback.from_user.id if callback.from_user else 0
+            self._log.info("Propuesta RECHAZADA id=%s por user_id=%s", proposal_id, user_id)
+            try:
+                import httpx
+
+                async with httpx.AsyncClient(timeout=60.0) as client:
+                    await client.post(
+                        f"{self._api_url}/api/proposals/{proposal_id}/reject",
+                        json={"user_id": str(user_id)},
+                    )
+            except Exception as exc:
+                self._log.warning("Error rechazando propuesta %s: %s", proposal_id, exc)
+            if callback.message:
+                await callback.message.edit_text(
+                    f"❌ Propuesta `{proposal_id}` *rechazada*. No se aplicarán cambios."
+                )
+            await callback.answer("❌ Rechazado")
+
+    # -- public API ------------------------------------------------------------
+
+    async def send_notification(
+        self,
+        chat_id: int | str,
+        text: str,
+        *,
+        proposal_id: Optional[str] = None,
+    ) -> None:
+        """Send a notification message, optionally with an approval inline keyboard.
+
+        Parameters
+        ----------
+        chat_id:
+            Target Telegram chat / user ID.
+        text:
+            Message text (Markdown).
+        proposal_id:
+            If provided, attaches Approve / Reject inline buttons for this
+            code-improvement proposal ID.
+        """
+        self._build()
+        try:
+            if proposal_id is not None:
+                from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+
+                keyboard = InlineKeyboardMarkup(
+                    inline_keyboard=[
+                        [
+                            InlineKeyboardButton(
+                                text="✅ Aprobar",
+                                callback_data=f"approve:{proposal_id}",
+                            ),
+                            InlineKeyboardButton(
+                                text="❌ Rechazar",
+                                callback_data=f"reject:{proposal_id}",
+                            ),
+                        ]
+                    ]
+                )
+                await self._bot.send_message(
+                    chat_id=chat_id, text=text, reply_markup=keyboard
+                )
+                self._log.info(
+                    "Notificación con inline keyboard enviada | chat_id=%s | proposal_id=%s",
+                    chat_id, proposal_id,
+                )
+            else:
+                await self._bot.send_message(chat_id=chat_id, text=text)
+                self._log.info(
+                    "Notificación enviada | chat_id=%s", chat_id
+                )
+        except Exception as exc:
+            self._log.error(
+                "Error enviando notificación a chat_id=%s: %s", chat_id, exc
+            )
+
+    async def start(self) -> None:
+        """Start long-polling. Blocks until the bot is stopped."""
+        self._build()
+        self._log.info("JarvisTelegramBot iniciando polling…")
+        try:
+            await self._dp.start_polling(self._bot, skip_updates=True)
+        except Exception as exc:
+            self._log.error("JarvisTelegramBot polling error: %s", exc, exc_info=True)
+            raise
+
+
+__all__ = ["TelegramChannel", "JarvisTelegramBot"]
