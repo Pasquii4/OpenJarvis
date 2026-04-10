@@ -45,10 +45,10 @@ class GroqEngine(InferenceEngine):
     engine_id = "groq"
     is_cloud = True
 
-    def __init__(self) -> None:
+    def __init__(self, api_key: str | None = None) -> None:
         self._client: Any = None
         self._async_client: Any = None
-        self._api_key = os.environ.get("GROQ_API_KEY", "")
+        self._api_key = api_key or os.environ.get("GROQ_API_KEY", "")
         if self._api_key:
             try:
                 import openai

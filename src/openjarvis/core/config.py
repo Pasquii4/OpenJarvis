@@ -331,7 +331,21 @@ class LlamaCppEngineConfig:
     """Per-engine config for llama.cpp."""
 
     host: str = "http://localhost:8080"
+    port: int = 8080
+    model_path: str = ""
+    lora_path: str = ""
+    n_ctx: int = 4096
+    n_gpu_layers: int = 0
     binary_path: str = ""
+
+
+@dataclass(slots=True)
+class GroqEngineConfig:
+    """Per-engine config for Groq Cloud."""
+
+    api_key: str = ""
+    model: str = "llama-3.3-70b-versatile"
+
 
 
 @dataclass(slots=True)
@@ -411,6 +425,10 @@ class EngineConfig:
     apple_fm: AppleFmEngineConfig = field(default_factory=AppleFmEngineConfig)
     gemma_cpp: GemmaCppEngineConfig = field(default_factory=GemmaCppEngineConfig)
     lemonade: LemonadeEngineConfig = field(default_factory=LemonadeEngineConfig)
+    llama_cpp: LlamaCppEngineConfig = field(default_factory=LlamaCppEngineConfig)
+    groq: GroqEngineConfig = field(default_factory=GroqEngineConfig)
+    channel_overrides: Dict[str, str] = field(default_factory=dict)
+
 
     # Backward-compat properties for old flat attribute names
     @property

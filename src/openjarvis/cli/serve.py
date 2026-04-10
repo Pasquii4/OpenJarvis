@@ -334,16 +334,15 @@ def serve(
             except Exception as exc:
                 logger.warning("Channel tools failed to load: %s", exc)
 
-        _wire_system = JarvisSystem(
-            config=config,
-            bus=bus,
-            engine=engine,
-            engine_key=engine_name,
-            model=model_name,
-            agent_name=channel_agent,
-            tools=_channel_tools,
-        )
-        _wire_system.wire_channel(channel_bridge)
+        try:
+            from openjarvis.system import SystemBuilder
+
+            # Use SystemBuilder to get a fully configured system
+            # (handles engine overrides, llama_cpp, etc.)
+            _wire_system = SystemBuilder(config).build()
+            _wire_system.wire_channel(channel_bridge)
+        except Exception as exc:
+            logger.warning("Failed to wire channel system: %s", exc)
 
     # Set up speech backend
     speech_backend = None

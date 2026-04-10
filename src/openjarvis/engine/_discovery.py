@@ -35,6 +35,23 @@ def _make_engine(key: str, config: JarvisConfig) -> InferenceEngine:
     """Instantiate a registered engine with the appropriate config host."""
     cls = EngineRegistry.get(key)
 
+    # llama_cpp: pass full config object
+    if key == "llama_cpp":
+        cfg = config.engine.llama_cpp
+        return cls(
+            host=cfg.host or None,
+            port=cfg.port,
+            model_path=cfg.model_path,
+            lora_path=cfg.lora_path,
+            n_ctx=cfg.n_ctx,
+            n_gpu_layers=cfg.n_gpu_layers,
+            binary_path=cfg.binary_path,
+        )
+
+    # groq: pass api_key from config
+    if key == "groq":
+        return cls(api_key=config.engine.groq.api_key or None)
+
     # gemma_cpp: pass config fields instead of host
     if key == "gemma_cpp":
         cfg = config.engine.gemma_cpp
@@ -92,7 +109,9 @@ def discover_models(
 
 
 def get_engine(
-    config: JarvisConfig, engine_key: str | None = None
+    config: JarvisConfig,
+    engine_key: str | None = None,
+    channel: str | None = None,
 ) -> Tuple[str, InferenceEngine] | None:
     """Get a specific engine by key, or the default with fallback.
 
@@ -100,8 +119,14 @@ def get_engine(
     """
     # Build an ordered list of keys to try, then fall back to full discovery.
     keys_to_try: list[str] = []
-    if engine_key:
-        keys_to_try.append(engine_key)
+    
+    # Check for channel-based engine override
+    effective_engine_key = engine_key
+    if channel and config.engine.channel_overrides:
+        effective_engine_key = config.engine.channel_overrides.get(channel, engine_key)
+
+    if effective_engine_key:
+        keys_to_try.append(effective_engine_key)
 
     default_key = config.engine.default
     if default_key and default_key not in keys_to_try:

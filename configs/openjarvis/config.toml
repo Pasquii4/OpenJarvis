@@ -67,9 +67,25 @@ api_key_env = "OPENROUTER_API_KEY"
 # [engine.sglang]
 # host = "http://localhost:30000"
 
-# llama.cpp — kept for potential local GGUF inference
-[engine.llamacpp]
-host = "http://localhost:8080"
+# llama.cpp — local GGUF inference (primary for production on RPi5)
+[engine.llama_cpp]
+host = "127.0.0.1"
+port = 8080
+model_path = "~/models/llama-3-8b-instruct.Q4_K_M.gguf"
+# lora_path = "~/models/jarvis-lora-adapter.bin"
+n_ctx = 4096
+n_gpu_layers = 0 # RPi5 uses CPU; set >0 for other platforms with GPU
+binary_path = "llama-server"
+
+# Groq Cloud — used as fallback for voice
+[engine.groq]
+api_key = "${GROQ_API_KEY}" # Read from environment variable
+model = "llama-3.3-70b-versatile"
+
+# Channel Routing — override engine for specific channels
+[engine.channel_overrides]
+voice = "groq" # Always use Groq for voice requests
+# cli = "llama_cpp"
 
 # ═══════════════════════════════════════════════════════════════
 # PILLAR 5: Learning — Improvement Methodologies

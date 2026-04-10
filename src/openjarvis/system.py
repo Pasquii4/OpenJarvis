@@ -51,6 +51,10 @@ class JarvisSystem:
     speech_backend: Optional[Any] = None  # SpeechBackend
     _learning_orchestrator: Optional[Any] = None  # LearningOrchestrator
     _mcp_clients: List = field(default_factory=list)
+    _engine_overrides: Dict[str, Tuple[str, InferenceEngine]] = field(
+        default_factory=dict
+    )
+
 
     def ask(
         self,
@@ -64,12 +68,45 @@ class JarvisSystem:
         system_prompt: Optional[str] = None,
         operator_id: Optional[str] = None,
         prior_messages: Optional[List[Message]] = None,
+        channel: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Execute a query through the system and return a result dict."""
         if temperature is None:
             temperature = self.config.intelligence.temperature
         if max_tokens is None:
             max_tokens = self.config.intelligence.max_tokens
+
+        # Resolve engine and model for the query
+        engine = self.engine
+        engine_key = self.engine_key
+        model = self.model
+
+        # Handle channel-based engine overrides
+        if channel and channel in self._engine_overrides:
+            override_key, override_engine = self._engine_overrides[channel]
+            logger.debug(
+                "Applying engine override for channel %r: %s -> %s",
+                channel,
+                engine_key,
+                override_key,
+            )
+            engine = override_engine
+            engine_key = override_key
+            
+            # Resolve model for the override engine
+            if override_key == "groq" and self.config.engine.groq.model:
+                model = self.config.engine.groq.model
+            elif override_key == "llama_cpp" and self.config.engine.llama_cpp.model_path:
+                # For llama_cpp, model name is usually derived from filename or just generic
+                model = os.path.basename(self.config.engine.llama_cpp.model_path)
+            else:
+                # Try to list models from override engine
+                try:
+                    models = engine.list_models()
+                    if models:
+                        model = models[0]
+                except Exception:
+                    pass
 
         messages = [Message(role=Role.USER, content=query)]
 
@@ -110,23 +147,26 @@ class JarvisSystem:
                 tools,
                 temperature,
                 max_tokens,
+                engine=engine,
+                model=model,
+                engine_key=engine_key,
                 system_prompt=system_prompt,
                 operator_id=operator_id,
                 prior_messages=prior_messages,
             )
 
         # Direct engine mode
-        result = self.engine.generate(
+        result = engine.generate(
             messages,
-            model=self.model,
+            model=model,
             temperature=temperature,
             max_tokens=max_tokens,
         )
         return {
             "content": result.get("content", ""),
             "usage": result.get("usage", {}),
-            "model": self.model,
-            "engine": self.engine_key,
+            "model": model,
+            "engine": engine_key,
         }
 
     def _detect_agent_intent(self, query: str) -> Optional[str]:
@@ -158,9 +198,11 @@ class JarvisSystem:
         messages,
         agent_name,
         tool_names,
-        temperature,
         max_tokens,
         *,
+        engine=None,
+        model=None,
+        engine_key=None,
         system_prompt=None,
         operator_id=None,
         prior_messages=None,
@@ -169,6 +211,11 @@ class JarvisSystem:
         from openjarvis.agents._stubs import AgentContext
         from openjarvis.core.events import EventType
         from openjarvis.core.registry import AgentRegistry
+
+        # Fallback to system defaults if not overridden
+        engine = engine or self.engine
+        model = model or self.model
+        engine_key = engine_key or self.engine_key
 
         # Resolve agent
         try:
@@ -247,7 +294,7 @@ class JarvisSystem:
             agent_kwargs.update({"timezone": dc.timezone})
 
         try:
-            ag = agent_cls(self.engine, self.model, **agent_kwargs)
+            ag = agent_cls(engine, model, **agent_kwargs)
         except TypeError:
             try:
                 ag = agent_cls(self.engine, self.model)
@@ -419,6 +466,7 @@ class JarvisSystem:
                         context=False,
                         agent=_system.agent_name,
                         prior_messages=prior_msgs,
+                        channel=cm.channel,
                     )
                     reply = result.get("content", "")
                 else:
@@ -426,6 +474,7 @@ class JarvisSystem:
                         cm.content,
                         context=False,
                         prior_messages=prior_msgs,
+                        channel=cm.channel,
                     )
                     reply = result.get("content", "")
             except Exception:
@@ -584,10 +633,8 @@ class SystemBuilder:
         config = self._config
         bus = self._bus or get_event_bus()
 
-        # Resolve engine
-        engine, engine_key = self._resolve_engine(config)
-
-        # Resolve model
+        # Resolve engines
+        engine, engine_key, overrides = self._resolve_engine(config)
         model = self._resolve_model(config, engine)
 
         # Compute telemetry_enabled and traces_enabled once
@@ -645,6 +692,17 @@ class SystemBuilder:
                 gpu_monitor=gpu_monitor,
                 energy_monitor=energy_monitor,
             )
+            # Also wrap overrides
+            for ch, (ek, eg) in overrides.items():
+                overrides[ch] = (
+                    ek,
+                    InstrumentedEngine(
+                        eg,
+                        bus,
+                        gpu_monitor=gpu_monitor,
+                        energy_monitor=energy_monitor,
+                    ),
+                )
 
         # Set up telemetry store
         telemetry_store = None
@@ -785,6 +843,7 @@ class SystemBuilder:
             agent_executor=agent_executor,
             speech_backend=speech_backend,
         )
+        system._engine_overrides = overrides
         system._learning_orchestrator = learning_orchestrator
         # Transfer MCP clients so JarvisSystem.close() can shut them down
         system._mcp_clients = list(getattr(self, "_mcp_clients", []))
@@ -794,7 +853,7 @@ class SystemBuilder:
         return system
 
     def _resolve_engine(self, config: JarvisConfig):
-        """Resolve the inference engine."""
+        """Resolve the primary inference engine and any channel overrides."""
         from openjarvis.engine._discovery import get_engine
 
         pref = config.intelligence.preferred_engine
@@ -805,7 +864,23 @@ class SystemBuilder:
                 "No inference engine available. "
                 "Make sure an engine is running (e.g. ollama serve)."
             )
-        return resolved[1], resolved[0]
+
+        # Resolve overrides
+        overrides = {}
+        if config.engine.channel_overrides:
+            for channel_id, target_key in config.engine.channel_overrides.items():
+                try:
+                    res = get_engine(config, target_key)
+                    if res:
+                        overrides[channel_id] = res
+                except Exception as exc:
+                    logger.warning(
+                        "Failed to resolve engine override for channel %r: %s",
+                        channel_id,
+                        exc,
+                    )
+
+        return resolved[1], resolved[0], overrides
 
     def _resolve_model(self, config: JarvisConfig, engine: InferenceEngine) -> str:
         """Resolve which model to use."""

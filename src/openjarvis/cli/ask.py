@@ -386,7 +386,7 @@ def ask(
     register_builtin_models()
 
     effective_engine_key = engine_key or config.intelligence.preferred_engine or None
-    resolved = get_engine(config, effective_engine_key)
+    resolved = get_engine(config, effective_engine_key, channel="cli")
     if resolved is None:
         console.print(
             "[red bold]No inference engine available.[/red bold]\n\n"
