@@ -7,8 +7,8 @@
 [intelligence]
 default_model = "openrouter/deepseek/deepseek-r1" # High-performance reasoning model via OpenRouter
 fallback_model = "openrouter/auto"              # Automatic fallback via OpenRouter
-preferred_engine = "cloud"                      # Use the cloud engine for OpenRouter
-provider = "cloud"                           # No local GPU required
+preferred_engine = "llama_cpp"                 # Use the local engine by default
+provider = "local"                           # Local inference
 quantization = "none"                        # N/A for cloud models
 # Generation defaults — conversational, not deterministic
 temperature = 0.7
@@ -45,7 +45,7 @@ enabled = true
 # PILLAR 4: Engine — The Inference Runtime
 # ═══════════════════════════════════════════════════════════════
 [engine]
-default = "cloud"
+default = "llama_cpp"
 
 [engine.cloud]
 base_url = "https://openrouter.ai/api/v1"
@@ -71,11 +71,11 @@ api_key_env = "OPENROUTER_API_KEY"
 [engine.llama_cpp]
 host = "127.0.0.1"
 port = 8080
-model_path = "~/models/llama-3-8b-instruct.Q4_K_M.gguf"
-# lora_path = "~/models/jarvis-lora-adapter.bin"
+model_path = "C:/Users/CEP-MATI/.openjarvis/models/Qwen2.5-7B-Instruct-Q4_K_M.gguf"
+# lora_path = ""
 n_ctx = 4096
-n_gpu_layers = 0 # RPi5 uses CPU; set >0 for other platforms with GPU
-binary_path = "llama-server"
+n_gpu_layers = 0 
+binary_path = "C:/llama.cpp/llama-b8740-bin-win-cpu-x64/llama-server.exe"
 
 # Groq Cloud — used as fallback for voice
 [engine.groq]
@@ -166,6 +166,10 @@ profile = "personal"                         # Personal security preset
 enabled = true
 default_channel = "telegram"
 default_agent = "native_react"
+
+[channel.telegram]
+bot_token = "${TELEGRAM_BOT_TOKEN}"
+allowed_chat_ids = ["${TELEGRAM_CHAT_ID}"]
 
 # ═══════════════════════════════════════════════════════════════
 # Digest — Morning briefing for Pau

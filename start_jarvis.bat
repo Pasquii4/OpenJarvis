@@ -9,10 +9,14 @@ TITLE JARVIS Personal Assistant
 REM Load environment variables from .env if present
 IF EXIST "%~dp0.env" (
     for /f "usebackq tokens=1,2 delims==" %%a in ("%~dp0.env") do (
-        REM Skip comments
-        echo %%a | findstr /b "#" >nul || set "%%a=%%b"
+        REM Skip comments and empty lines
+        echo %%a | findstr /b "#" >nul || IF NOT "%%a"=="" set "%%a=%%b"
     )
 )
+
+REM Force use of the repository-local config by default
+set "OPENJARVIS_CONFIG=%~dp0configs\openjarvis\config.toml"
+echo [INFO] Using local config: %OPENJARVIS_CONFIG%
 
 REM Check required env vars
 IF "%GROQ_API_KEY%"=="" (
@@ -49,8 +53,8 @@ echo ██   ██║██╔══██║██╔══██╗╚██
 echo ╚█████╔╝██║  ██║██║  ██║ ╚████╔╝ ██║███████║
 echo  ╚════╝ ╚═╝  ╚═╝╚═╝  ╚═╝  ╚═══╝  ╚═╝╚══════╝
 echo.
-echo  JARVIS Personal Assistant — Windows + Groq
-echo  ──────────────────────────────────────────
+echo  JARVIS Personal Assistant — LlamaCpp + Groq Fallback
+echo  ──────────────────────────────────────────────
 echo.
 echo  [1] Chat interactivo (jarvis chat)
 echo  [2] Solo scheduler en background

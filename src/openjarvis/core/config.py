@@ -10,6 +10,7 @@ from __future__ import annotations
 import functools
 import os
 import platform
+import re
 import shutil
 import subprocess
 from dataclasses import dataclass, field
@@ -1466,6 +1467,39 @@ def validate_config_key(dotted_key: str) -> type:
 # ---------------------------------------------------------------------------
 
 
+def _expand_env_vars(value: Any) -> Any:
+    """Expand ${VAR} or $VAR in strings using os.environ."""
+    if not isinstance(value, str):
+        return value
+
+    def _replace(match: re.Match) -> str:
+        var_name = match.group(1) or match.group(2)
+        return os.environ.get(var_name, match.group(0))
+
+    # Match ${VAR} or $VAR
+    pattern = r"\$\{(\w+)\}|\$(\w+)"
+    return re.sub(pattern, _replace, value)
+
+
+def load_env_file(path: Optional[Path] = None) -> None:
+    """Manual .env loader to avoid extra dependencies on basic installs."""
+    env_path = path or Path(".env")
+    if not env_path.exists():
+        return
+    try:
+        for line in env_path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            k, v = line.split("=", 1)
+            k = k.strip()
+            v = v.strip().strip("\"'").strip()
+            if k and k not in os.environ:
+                os.environ[k] = v
+    except Exception:
+        pass
+
+
 def _apply_toml_section(target: Any, section: Dict[str, Any]) -> None:
     """Overlay TOML key/value pairs onto a dataclass instance.
 
@@ -1481,11 +1515,16 @@ def _apply_toml_section(target: Any, section: Dict[str, Any]) -> None:
                 if hasattr(nested, "__dataclass_fields__"):
                     _apply_toml_section(nested, value)
                 else:
-                    setattr(target, key, value)
+                    # Apply expansion even to raw dicts
+                    expanded_dict = {
+                        k: _expand_env_vars(v) for k, v in value.items()
+                    }
+                    setattr(target, key, expanded_dict)
             else:
+                # Expand environment variables in string values
+                value = _expand_env_vars(value)
+
                 # Normalise TOML arrays → comma-separated string.
-                # Covers both real dataclass fields and backward-compat
-                # property setters (e.g. reward_weights, default_tools).
                 if isinstance(value, list):
                     is_str_field = False
                     if hasattr(target, "__dataclass_fields__"):
@@ -1493,10 +1532,9 @@ def _apply_toml_section(target: Any, section: Dict[str, Any]) -> None:
                         if field_obj is not None and field_obj.type in ("str", str):
                             is_str_field = True
                         elif field_obj is None:
-                            # Property, not a real field — normalise to string
                             is_str_field = True
                     if is_str_field:
-                        value = ",".join(str(v) for v in value)
+                        value = ",".join(str(_expand_env_vars(v)) for v in value)
                 setattr(target, key, value)
 
 
@@ -1544,6 +1582,7 @@ def load_config(path: Optional[Path] = None) -> JarvisConfig:
         Explicit config file. If not set, uses ``OPENJARVIS_CONFIG`` when set,
         otherwise ``~/.openjarvis/config.toml``.
     """
+    load_env_file()
     _ensure_config_dir()
     hw = detect_hardware()
     cfg = JarvisConfig(hardware=hw)

@@ -326,6 +326,12 @@ def _print_profile(
     is_flag=True,
     help="Print inference telemetry profile (latency, tokens, energy, IPW).",
 )
+@click.option(
+    "-c",
+    "--channel",
+    default=None,
+    help="Channel ID for engine routing (e.g. voice).",
+)
 def ask(
     query: tuple[str, ...],
     model_name: str | None,
@@ -338,6 +344,7 @@ def ask(
     agent_name: str | None,
     tool_names: str | None,
     enable_profile: bool,
+    channel: str | None,
 ) -> None:
     """Ask Jarvis a question."""
     console = Console(stderr=True)
@@ -386,7 +393,7 @@ def ask(
     register_builtin_models()
 
     effective_engine_key = engine_key or config.intelligence.preferred_engine or None
-    resolved = get_engine(config, effective_engine_key, channel="cli")
+    resolved = get_engine(config, effective_engine_key, channel=channel or "cli")
     if resolved is None:
         console.print(
             "[red bold]No inference engine available.[/red bold]\n\n"

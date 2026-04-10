@@ -8,10 +8,11 @@ the server if it is not already running.
 from __future__ import annotations
 
 import logging
-import os
 import subprocess
+import sys
 import time
 from collections.abc import AsyncIterator, Sequence
+from pathlib import Path
 from typing import Any, Dict, List
 
 import httpx
@@ -45,9 +46,9 @@ class LlamaCppEngine(_OpenAICompatibleEngine):
         self._port = port
         base_url = f"http://{self._host_addr}:{self._port}"
         super().__init__(host=base_url, timeout=timeout)
-        
-        self._model_path = model_path
-        self._lora_path = lora_path
+
+        self._model_path = Path(model_path) if model_path else None
+        self._lora_path = Path(lora_path) if lora_path else None
         self._n_ctx = n_ctx
         self._n_gpu_layers = n_gpu_layers
         self._binary_path = binary_path or "llama-server"
@@ -70,20 +71,31 @@ class LlamaCppEngine(_OpenAICompatibleEngine):
             logger.warning("llama_cpp: model_path not configured, cannot start server")
             return False
 
-        full_model_path = os.path.expanduser(self._model_path)
-        if not os.path.exists(full_model_path):
-            logger.warning("llama_cpp: model_path %s does not exist", full_model_path)
-            return False
+        # Resolve model path
+        full_model_path = self._model_path.expanduser().resolve()
+        if not full_model_path.exists():
+            raise EngineConnectionError(
+                f"llama_cpp: model_path {full_model_path} does not exist"
+            )
+
+        # Handle binary path / .exe on Windows
+        binary = self._binary_path
+        if sys.platform == "win32" and not binary.lower().endswith(".exe"):
+            # Try with .exe if it doesn't exist as-is
+            import shutil
+            if not shutil.which(binary):
+                if shutil.which(f"{binary}.exe"):
+                    binary = f"{binary}.exe"
 
         cmd = [
-            self._binary_path,
-            "-m", full_model_path,
+            binary,
+            "-m", str(full_model_path),
             "--port", str(self._port),
             "--ctx-size", str(self._n_ctx),
             "--n-gpu-layers", str(self._n_gpu_layers),
         ]
         if self._lora_path:
-            cmd.extend(["--lora", os.path.expanduser(self._lora_path)])
+            cmd.extend(["--lora", str(self._lora_path.expanduser().resolve())])
             
         # Add host if not default
         if self._host_addr not in ("127.0.0.1", "localhost"):
@@ -95,7 +107,6 @@ class LlamaCppEngine(_OpenAICompatibleEngine):
                 cmd,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
-                close_fds=True,
             )
             
             # Wait for server to become healthy

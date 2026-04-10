@@ -48,7 +48,13 @@ class GroqEngine(InferenceEngine):
     def __init__(self, api_key: str | None = None) -> None:
         self._client: Any = None
         self._async_client: Any = None
-        self._api_key = api_key or os.environ.get("GROQ_API_KEY", "")
+        
+        # Resolve API key — fallback to env if placeholder or empty
+        res_key = api_key or ""
+        if not res_key or res_key.startswith("$"):
+            res_key = os.environ.get("GROQ_API_KEY", "")
+        
+        self._api_key = res_key
         if self._api_key:
             try:
                 import openai

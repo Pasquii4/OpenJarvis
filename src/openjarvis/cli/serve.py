@@ -63,20 +63,6 @@ def serve(
         )
         sys.exit(1)
 
-    # Load environment variables from .env if present
-    env_path = os.path.join(os.getcwd(), ".env")
-    if os.path.exists(env_path):
-        try:
-            with open(env_path, "r", encoding="utf-8") as f:
-                for line in f:
-                    line = line.strip()
-                    if not line or line.startswith("#") or "=" not in line:
-                        continue
-                    k, v = line.split("=", 1)
-                    if k.strip() not in os.environ:
-                        os.environ[k.strip()] = v.strip()
-        except Exception as exc:
-            logger.debug("Failed to load .env file manually: %s", exc)
 
     config = load_config()
 
