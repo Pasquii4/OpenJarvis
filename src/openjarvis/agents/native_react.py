@@ -55,7 +55,7 @@ class NativeReActAgent(ToolUsingAgent):
         loop_guard_config: Optional[dict] = None,
     ) -> None:
         if loop_guard_config is None:
-            loop_guard_config = {"enabled": True, "max_repeated_calls": 3, "max_turns_without_progress": 5}
+            loop_guard_config = {"enabled": True, "max_identical_calls": 3}
         super().__init__(
             engine,
             model,
@@ -122,7 +122,7 @@ class NativeReActAgent(ToolUsingAgent):
             from openjarvis.core.config import load_config
 
             cfg = load_config()
-            identity = cfg.agent.default_system_prompt
+            identity = cfg.agent.get_system_prompt()
             if identity:
                 system_prompt = f"{identity}\n\n{react_prompt}"
             else:
@@ -240,16 +240,7 @@ class NativeReActAgent(ToolUsingAgent):
             observation = f"Observation: {tool_result.content}"
             messages.append(Message(role=Role.USER, content=observation))
             
-            if self._loop_guard is not None:
-                guard_result = self._loop_guard.check(messages, all_tool_results)
-                if guard_result.triggered:
-                    self._emit_turn_end(turns=turns, loop_guard_triggered=True)
-                    return AgentResult(
-                        content="He detectado un bucle en mi razonamiento. ¿Puedes reformular la pregunta, Pau?",
-                        tool_results=all_tool_results,
-                        turns=turns,
-                        metadata={"loop_guard_triggered": True, "reason": guard_result.reason},
-                    )
+
 
         # Max turns exceeded
         msg_dicts = [_message_to_dict(m) for m in messages]

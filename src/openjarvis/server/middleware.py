@@ -1,8 +1,11 @@
-"""Security middleware -- HTTP security headers and request guards."""
-
-from __future__ import annotations
-
 from typing import Any
+
+try:
+    from starlette.middleware.base import BaseHTTPMiddleware
+    from starlette.requests import Request
+    from starlette.responses import Response
+except ImportError:
+    BaseHTTPMiddleware = Request = Response = None  # type: ignore
 
 __all__ = ["SECURITY_HEADERS", "create_security_middleware"]
 
@@ -23,11 +26,7 @@ def create_security_middleware() -> Any:
     OPTIONS requests are passed through without headers so that
     CORS preflight is not blocked.
     """
-    try:
-        from starlette.middleware.base import BaseHTTPMiddleware
-        from starlette.requests import Request
-        from starlette.responses import Response
-    except ImportError:
+    if BaseHTTPMiddleware is None:
         return None
 
     class SecurityHeadersMiddleware(BaseHTTPMiddleware):

@@ -21,13 +21,21 @@ repetition_penalty = 1.0
 # PILLAR 2: Agent — The Agentic Harness
 # ═══════════════════════════════════════════════════════════════
 [agent]
-default_agent = "native_react"               # ReAct agent for interactive use
+default_agent = "orchestrator"
 max_turns = 10
 tools = "code_interpreter,web_search,file_read,calculator,think"
 objective = "Asistente personal inteligente para Pau"
-context_from_memory = true                   # Inject relevant memory into prompts
+context_from_memory = true
 system_prompt_path = "configs/openjarvis/prompts/jarvis_system.md"
 
+[agent.orchestrator]
+tools = "web_search,channel_send,http_request,file_read,code_interpreter,calculator,think"
+
+[agent.deep_research]
+tools = "web_search,http_request,file_read,calculator,think"
+
+[agent.native_react]
+tools = "web_search,channel_send,file_read,calculator,think"
 # ═══════════════════════════════════════════════════════════════
 # PILLAR 3: Tools — MCP Interface
 # ═══════════════════════════════════════════════════════════════

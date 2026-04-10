@@ -118,7 +118,7 @@ class OrchestratorAgent(ToolUsingAgent):
                 from openjarvis.core.config import load_config
 
                 cfg = load_config()
-                identity = cfg.agent.default_system_prompt
+                identity = cfg.agent.get_system_prompt()
                 if identity:
                     sys_prompt = f"{identity}\n\n{sys_prompt}"
             except Exception:
@@ -179,6 +179,21 @@ class OrchestratorAgent(ToolUsingAgent):
                     name=parsed["tool"],
                     arguments=parsed["input"] or "{}",
                 )
+
+                # Loop guard check
+                if self._loop_guard:
+                    verdict = self._loop_guard.check_call(tool_call.name, tool_call.arguments)
+                    if verdict.blocked:
+                        tool_result = ToolResult(
+                            tool_name=tool_call.name,
+                            content=f"Loop guard: {verdict.reason}",
+                            success=False,
+                        )
+                        all_tool_results.append(tool_result)
+                        observation = f"Observation: {tool_result.content}"
+                        messages.append(Message(role=Role.USER, content=observation))
+                        continue
+
                 tool_result = self._executor.execute(tool_call)
                 all_tool_results.append(tool_result)
 
@@ -366,6 +381,26 @@ class OrchestratorAgent(ToolUsingAgent):
 
                 # Append results in original order
                 for tc in tool_calls:
+                    # Loop guard check
+                    if self._loop_guard:
+                        verdict = self._loop_guard.check_call(tc.name, tc.arguments)
+                        if verdict.blocked:
+                            tool_result = ToolResult(
+                                tool_name=tc.name,
+                                content=f"Loop guard: {verdict.reason}",
+                                success=False,
+                            )
+                            all_tool_results.append(tool_result)
+                            messages.append(
+                                Message(
+                                    role=Role.TOOL,
+                                    content=tool_result.content,
+                                    tool_call_id=tc.id,
+                                    name=tc.name,
+                                )
+                            )
+                            continue
+
                     _, tool_result = results_map[id(tc)]
                     all_tool_results.append(tool_result)
                     messages.append(
@@ -379,6 +414,26 @@ class OrchestratorAgent(ToolUsingAgent):
             else:
                 # Sequential execution
                 for tc in tool_calls:
+                    # Loop guard check
+                    if self._loop_guard:
+                        verdict = self._loop_guard.check_call(tc.name, tc.arguments)
+                        if verdict.blocked:
+                            tool_result = ToolResult(
+                                tool_name=tc.name,
+                                content=f"Loop guard: {verdict.reason}",
+                                success=False,
+                            )
+                            all_tool_results.append(tool_result)
+                            messages.append(
+                                Message(
+                                    role=Role.TOOL,
+                                    content=tool_result.content,
+                                    tool_call_id=tc.id,
+                                    name=tc.name,
+                                )
+                            )
+                            continue
+
                     tool_result = self._executor.execute(tc)
                     all_tool_results.append(tool_result)
 
@@ -392,16 +447,7 @@ class OrchestratorAgent(ToolUsingAgent):
                         )
                     )
             
-            if self._loop_guard is not None:
-                guard_result = self._loop_guard.check(messages, all_tool_results)
-                if guard_result.triggered:
-                    self._emit_turn_end(turns=turns, loop_guard_triggered=True)
-                    return AgentResult(
-                        content="He detectado un bucle en mi razonamiento. ¿Puedes reformular la pregunta, Pau?",
-                        tool_results=all_tool_results,
-                        turns=turns,
-                        metadata={"loop_guard_triggered": True, "reason": guard_result.reason},
-                    )
+
 
         # Max turns exceeded
         final_content = self._strip_think_tags(content) if content else ""

@@ -3,7 +3,15 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
+
+try:
+    from fastapi import APIRouter, HTTPException, Request
+    from fastapi.responses import HTMLResponse, RedirectResponse
+    from pydantic import BaseModel
+except ImportError:
+    # These will be checked again in the factory function to provide clear errors
+    APIRouter = HTTPException = Request = HTMLResponse = RedirectResponse = BaseModel = None  # type: ignore
 
 logger = logging.getLogger(__name__)
 
@@ -54,10 +62,8 @@ def _ensure_connectors_registered() -> None:
 # the type annotation correctly when injecting request bodies.
 # ---------------------------------------------------------------------------
 
-try:
-    from pydantic import BaseModel as _BaseModel
-
-    class ConnectRequest(_BaseModel):
+if BaseModel is not None:
+    class ConnectRequest(BaseModel):
         """Credentials / connection parameters for a connector."""
 
         path: Optional[str] = None
@@ -65,8 +71,7 @@ try:
         code: Optional[str] = None
         email: Optional[str] = None
         password: Optional[str] = None
-
-except ImportError:
+else:
     ConnectRequest = None  # type: ignore[assignment,misc]
 
 
@@ -77,12 +82,10 @@ def create_connectors_router():
     dependency and mirrors the pattern used by other optional routers in
     this package.
     """
-    try:
-        from fastapi import APIRouter, HTTPException, Request
-    except ImportError as exc:
+    if APIRouter is None or Request is None:
         raise ImportError(
             "fastapi and pydantic are required for the connectors router"
-        ) from exc
+        )
 
     if ConnectRequest is None:
         raise ImportError("pydantic is required for the connectors router")
@@ -346,8 +349,6 @@ def create_connectors_router():
         }
         auth_url = f"{provider.auth_endpoint}?{urlencode(params)}"
 
-        from fastapi.responses import RedirectResponse
-
         return RedirectResponse(url=auth_url)
 
     @router.get("/{connector_id}/oauth/callback")
@@ -358,7 +359,6 @@ def create_connectors_router():
         request: Request = None,
     ):
         """Handle OAuth callback from the provider."""
-        from fastapi.responses import HTMLResponse
 
         from openjarvis.connectors.oauth import (
             _CONNECTORS_DIR,

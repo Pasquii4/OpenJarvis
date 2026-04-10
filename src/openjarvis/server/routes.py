@@ -50,6 +50,29 @@ async def chat_completions(request_body: ChatCompletionRequest, request: Request
     agent = getattr(request.app.state, "agent", None)
     model = request_body.model
 
+    # HARDCODED FIX: Ensure system prompt is present for JARVIS identity
+    try:
+        from pathlib import Path
+        jarvis_prompt_path = Path("configs/openjarvis/prompts/jarvis_system.md")
+        # Try a few locations since CWD can vary on Windows
+        if not jarvis_prompt_path.exists():
+            repo_root = Path(__file__).parent.parent.parent.parent
+            jarvis_prompt_path = repo_root / "configs" / "openjarvis" / "prompts" / "jarvis_system.md"
+
+        if jarvis_prompt_path.exists():
+            system_content = jarvis_prompt_path.read_text(encoding="utf-8")
+            if not request_body.messages or request_body.messages[0].role != "system":
+                from openjarvis.server.models import ChatMessage
+                request_body.messages.insert(0, ChatMessage(role="system", content=system_content))
+    except Exception:
+        # Fallback to hardcoded string if file read fails
+        if not request_body.messages or request_body.messages[0].role != "system":
+             from openjarvis.server.models import ChatMessage
+             request_body.messages.insert(0, ChatMessage(
+                 role="system", 
+                 content="Eres JARVIS, el asistente personal de Pau. Responde siempre en español."
+             ))
+
     # Inject memory context into messages before dispatching
     config = getattr(request.app.state, "config", None)
     memory_backend = getattr(request.app.state, "memory_backend", None)
@@ -139,11 +162,7 @@ async def chat_completions(request_body: ChatCompletionRequest, request: Request
 
     if request_body.stream:
         bus = getattr(request.app.state, "bus", None)
-        # Use the agent stream bridge only when tools are present (the
-        # bridge runs agent.run() synchronously and word-splits the result,
-        # so it can't stream tokens in real-time).  For plain chat, stream
-        # directly from the engine for true token-by-token output.
-        if agent is not None and bus is not None and request_body.tools:
+        if agent is not None and bus is not None:
             return await _handle_agent_stream(agent, bus, model, request_body)
         return await _handle_stream(engine, model, request_body, complexity_info)
 
@@ -422,11 +441,9 @@ async def _handle_stream(
         )
         finish_dict = _json.loads(finish_data.model_dump_json())
 
-        # Tag the finish chunk with the correct engine label.
-        # We use the routing decision (use_cloud) directly rather than
-        # unwrapping the engine chain, which can be in a broken state.
         finish_dict.setdefault("telemetry", {})
-        finish_dict["telemetry"]["engine"] = "cloud" if use_cloud else "ollama"
+        engine_name = getattr(request.app.state, "engine_name", "local")
+        finish_dict["telemetry"]["engine"] = "cloud" if use_cloud else engine_name
 
         if complexity_info is not None:
             finish_dict["complexity"] = complexity_info.model_dump()

@@ -842,6 +842,19 @@ class AgentConfig:
         "- No añadas despedidas ni saludos innecesarios en respuestas cortas"
     )
 
+    # Per-agent overrides (populated by loader from [agent.name] sections)
+    _overrides: Dict[str, Any] = field(default_factory=dict)
+
+    def get_agent_setting(self, agent_name: str, key: str, default: Any = None) -> Any:
+        """Resolve a setting for a specific agent, falling back to global default."""
+        if agent_name in self._overrides:
+            agent_data = self._overrides[agent_name]
+            if isinstance(agent_data, dict) and key in agent_data:
+                return agent_data[key]
+        
+        # Fallback to global setting on AgentConfig
+        return getattr(self, key, default)
+
     # Backward-compat property for old field name
     @property
     def default_tools(self) -> str:
@@ -851,6 +864,47 @@ class AgentConfig:
     @default_tools.setter
     def default_tools(self, value: str) -> None:
         self.tools = value
+
+    def get_system_prompt(self, project_root: Optional[Path] = None) -> str:
+        """Resolve the final system prompt with precedence.
+
+        Precedence:
+        1. system_prompt (inline string from config)
+        2. system_prompt_path (content of file at path)
+        3. default_system_prompt (hardcoded fallback)
+        """
+        if self.system_prompt:
+            return self.system_prompt
+
+        if self.system_prompt_path:
+            try:
+                path = Path(self.system_prompt_path)
+                if not path.is_absolute():
+                    # If project_root not provided, try repo root or assumes CWD
+                    # src/openjarvis/core/config.py -> parent x 3 is src/, x 4 is repo root
+                    repo_root = Path(__file__).parent.parent.parent.parent
+                    
+                    # Try resolving relative to CWD first
+                    candidate = Path.cwd() / path
+                    
+                    # If not found, try relative to repo root
+                    if not candidate.exists():
+                        candidate = repo_root / path
+                    
+                    # Specific fallback for OpenJarvis folder structure
+                    if not candidate.exists() and "prompts" not in str(path):
+                         # Try looking in the new prompts location
+                         candidate = repo_root / "configs" / "openjarvis" / "prompts" / path.name
+
+                    path = candidate
+
+                if path.exists():
+                    return path.read_text(encoding="utf-8").strip()
+            except Exception:
+                # Fall back to default on any read error
+                pass
+
+        return self.default_system_prompt
 
 
 @dataclass(slots=True)
@@ -1536,6 +1590,10 @@ def _apply_toml_section(target: Any, section: Dict[str, Any]) -> None:
                     if is_str_field:
                         value = ",".join(str(_expand_env_vars(v)) for v in value)
                 setattr(target, key, value)
+        elif isinstance(target, AgentConfig) and isinstance(value, dict):
+            # Special case for AgentConfig: collect sub-tables (like [agent.orchestrator])
+            # as per-agent overrides.
+            target._overrides[key] = value
 
 
 def _migrate_toml_data(data: Dict[str, Any], cfg: "JarvisConfig") -> None:
@@ -1593,7 +1651,12 @@ def load_config(path: Optional[Path] = None) -> JarvisConfig:
     elif os.environ.get("OPENJARVIS_CONFIG"):
         config_path = Path(os.environ["OPENJARVIS_CONFIG"]).expanduser().resolve()
     else:
-        config_path = DEFAULT_CONFIG_PATH
+        # Prefer repo-local config if it exists
+        repo_config = Path(__file__).parent.parent.parent.parent / "configs" / "openjarvis" / "config.toml"
+        if repo_config.exists():
+            config_path = repo_config
+        else:
+            config_path = DEFAULT_CONFIG_PATH
     if config_path.exists():
         with open(config_path, "rb") as fh:
             data = tomllib.load(fh)

@@ -162,6 +162,16 @@ class RLMAgent(ToolUsingAgent):
                 # Custom system_prompt override without {tool_section}
                 system_prompt = RLM_SYSTEM_PROMPT
 
+            # Prepend identity prompt from config (e.g. JARVIS persona)
+            try:
+                from openjarvis.core.config import load_config
+                cfg = load_config()
+                identity = cfg.agent.get_system_prompt()
+                if identity:
+                    system_prompt = f"{identity}\n\n{system_prompt}"
+            except Exception:
+                pass
+
         # Create REPL with sub-LM callbacks
         repl = RLMRepl(
             llm_query_fn=self._make_sub_query,

@@ -151,7 +151,7 @@ class BaseAgent(ABC):
             # Fall back to the config-level default (grounds local models)
             try:
                 cfg = load_config()
-                effective_system_prompt = cfg.agent.default_system_prompt or None
+                effective_system_prompt = cfg.agent.get_system_prompt()
             except Exception:
                 effective_system_prompt = None
         if effective_system_prompt:

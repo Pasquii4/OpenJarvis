@@ -198,6 +198,7 @@ class JarvisSystem:
         messages,
         agent_name,
         tool_names,
+        temperature,
         max_tokens,
         *,
         engine=None,
@@ -225,6 +226,15 @@ class JarvisSystem:
 
         # Build tools for agent
         agent_tools = self.tools
+        if not tool_names:
+            # Check for per-agent override in config
+            override_tools = self.config.agent.get_agent_setting(agent_name, "tools")
+            if override_tools:
+                if isinstance(override_tools, list):
+                    tool_names = [n.strip() for n in override_tools if n.strip()]
+                else:
+                    tool_names = [n.strip() for n in override_tools.split(",") if n.strip()]
+
         if tool_names:
             agent_tools = self._build_tools(tool_names)
 
