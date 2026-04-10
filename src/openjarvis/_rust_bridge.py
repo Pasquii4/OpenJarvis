@@ -32,7 +32,11 @@ def get_rust_module() -> _types.ModuleType:
     return openjarvis_rust
 
 
-RUST_AVAILABLE: bool = True
+try:
+    import openjarvis_rust  # type: ignore[import-untyped]
+    RUST_AVAILABLE: bool = True
+except ImportError:
+    RUST_AVAILABLE = False
 
 
 # ---------------------------------------------------------------------------
